@@ -3,15 +3,15 @@
  * Handles recursive processing of values (strings, objects, arrays) with script execution support
  */
 
-import { isArray, isObject, isNull } from "@es-toolkit/es-toolkit/compat";
-import { processStringValue, headerKeyToEnvVar } from "./script-executor.ts";
+import { isArray, isNull, isObject } from "@es-toolkit/es-toolkit/compat";
+import { headerKeyToEnvVar, processStringValue } from "./script-executor.ts";
 
 /**
  * Processes any value (string, object, or array), executing scripts and replacing template variables
  */
 export async function processValue(
   value: unknown,
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
 ): Promise<unknown> {
   if (typeof value === "string") {
     return await processStringValue(value, env);
@@ -41,7 +41,7 @@ export async function processValue(
  * Headers are processed in order to allow later scripts to use earlier results
  */
 export async function processHeaders(
-  headers: Record<string, string>
+  headers: Record<string, string>,
 ): Promise<Record<string, string>> {
   const processedHeaders: Record<string, string> = {};
   const env: Record<string, string> = {};
@@ -56,7 +56,8 @@ export async function processHeaders(
     // Convert header key to env var format (lowercase to uppercase, dashes to underscores)
     const envKey = headerKeyToEnvVar(key);
     env[envKey] = result;
-    env[key.replace(/-/g, "_")] = result; // Also store with original case pattern
+    // For compatibility
+    env[key] = result;
   }
 
   return processedHeaders;
@@ -66,7 +67,7 @@ export async function processHeaders(
  * Processes path parameters, executing scripts and replacing template variables
  */
 export async function processPathParams(
-  pathParams: Record<string, unknown>
+  pathParams: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   return (await processValue(pathParams)) as Record<string, unknown>;
 }
@@ -75,7 +76,7 @@ export async function processPathParams(
  * Processes input parameters, executing scripts and replacing template variables
  */
 export async function processInputParams(
-  inputParams: Record<string, unknown>
+  inputParams: Record<string, unknown>,
 ): Promise<Record<string, unknown>> {
   return (await processValue(inputParams)) as Record<string, unknown>;
 }
@@ -86,7 +87,7 @@ export async function processInputParams(
 export async function processRequestValues(
   headers: Record<string, string>,
   pathParams: Record<string, unknown>,
-  inputParams: Record<string, unknown>
+  inputParams: Record<string, unknown>,
 ): Promise<{
   headers: Record<string, string>;
   pathParams: Record<string, unknown>;

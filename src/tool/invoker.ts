@@ -1,16 +1,16 @@
 import {
+  cloneDeep,
   extend,
-  isObject,
+  flow,
+  get,
+  has,
   isArray,
   isNull,
+  isObject,
   map,
-  flow,
+  reduce,
   set,
   unset,
-  get,
-  reduce,
-  has,
-  cloneDeep,
 } from "@es-toolkit/es-toolkit/compat";
 import {
   generateTencentCloudSignature,
@@ -39,7 +39,7 @@ interface InvokerResponse {
 export async function invoke(
   spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
-  params: Record<string, ExtendedAIToolSchema["inputSchema"]>
+  params: Record<string, ExtendedAIToolSchema["inputSchema"]>,
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
 
@@ -67,7 +67,7 @@ export async function invoke(
   const processed = await processRequestValues(
     requestHeaders,
     pathParams,
-    inputParams
+    inputParams,
   );
   requestHeaders = processed.headers;
   pathParams = processed.pathParams;
@@ -129,7 +129,7 @@ export async function invoke(
       url.searchParams,
       requestHeaders,
       requestBody,
-      authConfig
+      authConfig,
     );
   }
 
@@ -154,23 +154,21 @@ export async function invoke(
   let response: Response | null = null;
   let error: Error | null = null;
 
-  console.log(
-    `Request Options: ${JSON.stringify({ requestOptions, url, baseUrl }, null, 2)}`
-  );
-
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       response = await fetch(url.toString(), requestOptions);
-      console.log(await response.text()); // Log the response body for debugging
       break;
     } catch (err) {
       error = err as Error;
       console.error(
-        `Attempt ${attempt + 1} failed for tool ${extendTool.name}: ${error.message}`, error
+        `Attempt ${
+          attempt + 1
+        } failed for tool ${extendTool.name}: ${error.message}`,
+        error,
       );
       if (attempt === retries) {
         throw new Error(
-          `Failed to invoke tool ${extendTool.name}: ${error.message}`
+          `Failed to invoke tool ${extendTool.name}: ${error.message}`,
         );
       }
       // Wait before retrying (exponential backoff)
@@ -209,19 +207,6 @@ export async function invoke(
     raw: response,
   };
 
-  console.log(
-    `Response: ${JSON.stringify(
-      {
-        status: invokerResponse.status,
-        statusText: invokerResponse.statusText,
-        headers: invokerResponse.headers,
-        data: invokerResponse.data,
-      },
-      null,
-      2
-    )}`
-  );
-
   return invokerResponse;
 }
 
@@ -232,7 +217,7 @@ function transformItem(
   item: any,
   includeKeys: string[],
   excludeKeys: string[],
-  sensitiveKeys: string[]
+  sensitiveKeys: string[],
 ): any {
   // If item is not an object or is null, transformations do not apply.
   if (!isObject(item) || isNull(item)) {
@@ -258,7 +243,7 @@ function transformItem(
           }
           return acc;
         },
-        {} // Initial accumulator is an empty object
+        {}, // Initial accumulator is an empty object
       );
     }
     return cloneDeep(originalItem); // Use _.cloneDeep
@@ -339,7 +324,7 @@ function transformItem(
         }
         return acc;
       },
-      currentProcessedItem // Start with the currentProcessedItem
+      currentProcessedItem, // Start with the currentProcessedItem
     );
   };
 
@@ -355,7 +340,7 @@ function transformItem(
 export function postProcess(
   _spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
-  data: unknown
+  data: unknown,
 ): unknown {
   const responseConfigGlobal = _spec["x-response-config"] || {};
   const op = extendTool._rawOperation;
@@ -364,12 +349,10 @@ export function postProcess(
       return data;
     }
 
-    const includeResponseKeys: string[] =
-      op["x-include-response-keys"] ||
+    const includeResponseKeys: string[] = op["x-include-response-keys"] ||
       responseConfigGlobal["includeResponseKeys"] ||
       [];
-    const excludeResponseKeys: string[] =
-      op["x-exclude-response-keys"] ||
+    const excludeResponseKeys: string[] = op["x-exclude-response-keys"] ||
       responseConfigGlobal["excludeResponseKeys"] ||
       [];
     const sensitiveResponseFields: string[] =
@@ -395,7 +378,7 @@ export function postProcess(
         currentItem,
         includeResponseKeys,
         excludeResponseKeys,
-        sensitiveResponseFields
+        sensitiveResponseFields,
       );
     });
 
@@ -417,7 +400,8 @@ function truncateData(data: unknown, maxLength?: number): unknown {
   }
 
   return {
-    message: `Response was truncated (length: ${stringified.length}, max: ${maxLength})`,
+    message:
+      `Response was truncated (length: ${stringified.length}, max: ${maxLength})`,
     truncatedData: stringified.slice(0, maxLength) + "...",
   };
 }
