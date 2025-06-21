@@ -19,7 +19,7 @@ import {
 import type { OAPISpecDocument, OperationExtension } from "./parser.ts";
 import type { ExtendedAIToolSchema } from "./translator.ts";
 import { p } from "@mcpc/core";
-import { writeFileSync } from "node:fs";
+import { processRequestValues } from "./value-processor.ts";
 
 export const SENSITIVE_MARK = "*SENSITIVE*";
 
@@ -63,6 +63,16 @@ export async function invoke(
   let requestHeaders = { ...headers };
   let requestBody: string | null = null;
 
+  // Process all values including headers, pathParams, and inputParams
+  const processed = await processRequestValues(
+    requestHeaders,
+    pathParams,
+    inputParams
+  );
+  requestHeaders = processed.headers;
+  pathParams = processed.pathParams;
+  inputParams = processed.inputParams;
+
   let url = new URL(specificUrl ?? baseUrl);
 
   const pathItems = path.split("/").slice(1);
@@ -75,13 +85,17 @@ export async function invoke(
       }
     }
   } else {
-    url.pathname = path;
+    url.pathname += path;
   }
 
   // Add query parameters for GET requests
   if (method === "get" && Object.keys(inputParams).length > 0) {
     for (const [key, value] of Object.entries(inputParams)) {
-      url.searchParams.append(key, String(value));
+      if (typeof value === "object") {
+        url.searchParams.append(key, JSON.stringify(value));
+      } else {
+        url.searchParams.append(key, String(value));
+      }
     }
   }
 
@@ -108,7 +122,7 @@ export async function invoke(
     }
 
     // Prepare headers with TC3-HMAC-SHA256 signature
-    // @ts-ignore
+    // @ts-ignore: generateTencentCloudSignature function signature may not match perfectly with TypeScript
     requestHeaders = generateTencentCloudSignature(
       method,
       path,
@@ -140,14 +154,20 @@ export async function invoke(
   let response: Response | null = null;
   let error: Error | null = null;
 
-  console.log(`Request Options: ${JSON.stringify(requestOptions)}`);
+  console.log(
+    `Request Options: ${JSON.stringify({ requestOptions, url, baseUrl }, null, 2)}`
+  );
 
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
       response = await fetch(url.toString(), requestOptions);
+      console.log(await response.text()); // Log the response body for debugging
       break;
     } catch (err) {
       error = err as Error;
+      console.error(
+        `Attempt ${attempt + 1} failed for tool ${extendTool.name}: ${error.message}`, error
+      );
       if (attempt === retries) {
         throw new Error(
           `Failed to invoke tool ${extendTool.name}: ${error.message}`
@@ -188,6 +208,19 @@ export async function invoke(
     data,
     raw: response,
   };
+
+  console.log(
+    `Response: ${JSON.stringify(
+      {
+        status: invokerResponse.status,
+        statusText: invokerResponse.statusText,
+        headers: invokerResponse.headers,
+        data: invokerResponse.data,
+      },
+      null,
+      2
+    )}`
+  );
 
   return invokerResponse;
 }

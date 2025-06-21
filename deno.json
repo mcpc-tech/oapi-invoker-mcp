@@ -9,7 +9,9 @@
     },
     "imports": {
         "@ai-sdk/openai": "npm:@ai-sdk/openai@^1.3.7",
+        "@es-toolkit/es-toolkit": "jsr:@es-toolkit/es-toolkit@^1.39.4",
         "@hono/zod-openapi": "npm:@hono/zod-openapi@^0.19.2",
+        "@mcpc/core": "jsr:@mcpc/core@^0.0.30",
         "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@^1.8.0",
         "@scalar/openapi-parser": "npm:@scalar/openapi-parser@^0.10.14",
         "@scalar/openapi-types": "npm:@scalar/openapi-types@^0.2.0",
