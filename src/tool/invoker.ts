@@ -152,7 +152,9 @@ export async function invoke(
       }
     }
   } else {
-    url = new URL(path, specificUrl ?? baseUrl);
+    // Preserve base URL's path and append the tool path to support multi-level base URLs
+    // Remove trailing slash from base path if present, then concatenate
+    url.pathname = url.pathname.replace(/\/$/, "") + path;
   }
 
   // Add query parameters for GET requests

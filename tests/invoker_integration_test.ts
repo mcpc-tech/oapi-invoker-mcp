@@ -274,3 +274,42 @@ Deno.stdout.write(new TextEncoder().encode(id));`,
     globalThis.fetch = originalFetch;
   }
 });
+
+// Test that multi-level baseUrl is preserved when path starts with '/'
+Deno.test("invoke - preserves multi-level baseUrl when path is absolute", async () => {
+  let capturedUrl = "";
+  // Mock fetch to capture URL
+  globalThis.fetch = (url: string | URL | Request, _options?: RequestInit) => {
+    capturedUrl = url.toString();
+    return Promise.resolve(mockResponse({}));
+  };
+
+  const spec = {
+    "x-sensitive-params": {},
+    "x-request-config": {
+      baseUrl: "http://api.sgw.woa.com/ebus/iwiki/prod/tencent/api"
+    },
+    servers: [{ url: "http://api.sgw.woa.com/ebus/iwiki/prod/tencent/api" }]
+  };
+
+  const extendTool = {
+    name: "test-tool",
+    method: "get",
+    path: "/v2/doc/body",
+    _rawOperation: undefined,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pathParams: { type: "object" as const, properties: {} },
+        inputParams: { type: "object" as const, properties: {} }
+      }
+    }
+  };
+
+  // Invoke with empty params
+  await invoke(spec, extendTool, { pathParams: {}, inputParams: {} });
+  assertEquals(capturedUrl, "http://api.sgw.woa.com/ebus/iwiki/prod/tencent/api/v2/doc/body");
+
+  // Restore fetch
+  globalThis.fetch = originalFetch;
+});
