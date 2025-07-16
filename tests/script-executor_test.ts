@@ -142,3 +142,36 @@ Deno.stdout.write(new TextEncoder().encode(result));`;
   
   assertEquals(result, "HELLO_PROCESSED");
 });
+
+Deno.test("executeScript - script with node shebang", async () => {
+  const script = `#!/usr/bin/env node
+process.stdout.write("node-script-output");`;
+
+  const result = await executeScript(script);
+  
+  assertEquals(typeof result, "string");
+  assertEquals(result, "node-script-output");
+});
+
+Deno.test("executeScript - node script with environment variables", async () => {
+  const script = `#!/usr/bin/env node
+const testVar = process.env.TEST_NODE_VAR || "default";
+process.stdout.write("node-value:" + testVar);`;
+
+  const env = { TEST_NODE_VAR: "custom-node-value" };
+  const result = await executeScript(script, env);
+  
+  assertEquals(result, "node-value:custom-node-value");
+});
+
+Deno.test("processStringValue - node script execution", async () => {
+  const value = `#!/usr/bin/env node
+const data = JSON.stringify({ timestamp: Date.now(), type: "node-script" });
+process.stdout.write(data);`;
+
+  const result = await processStringValue(value);
+  
+  const parsedResult = JSON.parse(result);
+  assertEquals(typeof parsedResult.timestamp, "number");
+  assertEquals(parsedResult.type, "node-script");
+});
