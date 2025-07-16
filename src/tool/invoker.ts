@@ -39,7 +39,7 @@ interface InvokerResponse {
 export async function invoke(
   spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
-  params: Record<string, ExtendedAIToolSchema["inputSchema"]>,
+  params: { pathParams?: Record<string, unknown>; inputParams?: Record<string, unknown> },
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
 
@@ -50,9 +50,9 @@ export async function invoke(
 
   const method = extendTool.method?.toLowerCase() || "get";
   const path = p(extendTool.path!)({ ...pathParams });
-  const _op = extendTool._rawOperation!;
-  const specificUrl = _op["x-custom-base-url"];
-  const sensitiveParams = _op["x-sensitive-params"] ?? {};
+  const _op = (extendTool._rawOperation || {}) as Record<string, unknown>;
+  const specificUrl = _op["x-custom-base-url"] as string | undefined;
+  const sensitiveParams = (_op["x-sensitive-params"] as Record<string, unknown>) ?? {};
 
   inputParams = extend(inputParams, sensitiveParams);
 
@@ -76,16 +76,16 @@ export async function invoke(
   let url = new URL(specificUrl ?? baseUrl);
 
   const pathItems = path.split("/").slice(1);
-  const pathRemaps = _op["x-remap-path-to-header"];
+  const pathRemaps = _op["x-remap-path-to-header"] as string[] | undefined;
   if (pathRemaps) {
-    for (const headerKey of _op["x-remap-path-to-header"] ?? []) {
+    for (const headerKey of pathRemaps) {
       const currVal = pathItems.shift();
       if (currVal) {
         requestHeaders[headerKey] = currVal;
       }
     }
   } else {
-    url.pathname += path;
+    url = new URL(path, specificUrl ?? baseUrl);
   }
 
   // Add query parameters for GET requests
@@ -115,14 +115,14 @@ export async function invoke(
 
     // Get action from operation if available
     if (_op.operationId && !authConfig.action) {
-      authConfig.action = _op.operationId;
+      authConfig.action = _op.operationId as string;
     }
     if (requestHeaders["x-tc-service"]) {
       authConfig.service = requestHeaders["x-tc-service"];
     }
 
     // Prepare headers with TC3-HMAC-SHA256 signature
-    // @ts-ignore: generateTencentCloudSignature function signature may not match perfectly with TypeScript
+    // @ts-ignore: generateTencentCloudSignature function signature may not match perfectly with Type`Script`
     requestHeaders = generateTencentCloudSignature(
       method,
       path,

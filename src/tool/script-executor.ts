@@ -1,10 +1,16 @@
+import { promises as fs } from 'node:fs';
+import { spawn } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import process from 'node:process';
+
 /**
  * Script execution utilities for OAPI Invoker
  * Handles dynamic script execution for generating values at runtime
  */
 
 /**
- * Executes a Deno script and returns the output
+ * Executes a script and returns the output
  */
 export async function executeScript(
   script: string,
@@ -12,37 +18,50 @@ export async function executeScript(
 ): Promise<string> {
   try {
     // Create a temporary file for the script using tmpdir
-    const tempDir = Deno.env.get("TMPDIR") || Deno.env.get("TMP") || "/tmp";
-    const tempFile = `${tempDir}/script_${Date.now()}_${Math.random()
+    const tempDir = tmpdir();
+    const tempFile = join(tempDir, `script_${Date.now()}_${Math.random()
       .toString(36)
-      .substr(2)}.ts`;
+      .substr(2)}`);
 
-    // Make sure script is executable
-    await Deno.writeTextFile(tempFile, script, { mode: 0o755 });
+    // Write script to temporary file with executable permissions
+    await fs.writeFile(tempFile, script, { mode: 0o755 });
 
-    // Execute the script using deno run with permissions
-    const command = new Deno.Command("deno", {
-      args: ["run", "--allow-all", tempFile],
-      env: { ...Deno.env.toObject(), ...env },
-      stdout: "piped",
-      stderr: "piped",
+    // Execute the script file directly using shebang
+    const result = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
+      const child = spawn(tempFile, [], {
+        env: { ...process.env, ...env },
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout?.on('data', (data) => {
+        stdout += data.toString();
+      });
+
+      child.stderr?.on('data', (data) => {
+        stderr += data.toString();
+      });
+
+      child.on('error', reject);
+      child.on('close', (code) => {
+        resolve({ code: code || 0, stdout, stderr });
+      });
     });
-
-    const { code, stdout, stderr } = await command.output();
 
     // Clean up temp file
     try {
-      await Deno.remove(tempFile);
+      await fs.unlink(tempFile);
     } catch {
       // Ignore cleanup errors
     }
 
-    if (code !== 0) {
-      const errorMessage = new TextDecoder().decode(stderr);
-      throw new Error(`Script execution failed: ${errorMessage}`);
+    if (result.code !== 0) {
+      throw new Error(`Script execution failed: ${result.stderr}`);
     }
 
-    return new TextDecoder().decode(stdout);
+    return result.stdout;
   } catch (error: unknown) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     throw new Error(`Failed to execute script: ${errorMessage}`);
@@ -54,7 +73,7 @@ export async function executeScript(
  */
 export function isScript(value: unknown): value is string {
   return (
-    typeof value === "string" && value.trim().startsWith("#!/usr/bin/env deno")
+    typeof value === "string" && value.trim().startsWith("#!")
   );
 }
 
@@ -66,11 +85,10 @@ export function processTemplateVariables(
   value: string,
   env: Record<string, string> = {}
 ): string {
-  let processedValue = value;
   const templateRegex = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
-  return processedValue.replace(templateRegex, (match, envVar) => {
-    return Deno.env.get(envVar) || env[envVar] || "";
+  return value.replace(templateRegex, (_match, envVar) => {
+    return process.env[envVar] || env[envVar] || "";
   });
 }
 
@@ -82,7 +100,7 @@ export async function processStringValue(
   env: Record<string, string> = {}
 ): Promise<string> {
   console.log("Processing string value:", value, env);
-  // Check if the value is a script (starts with #!/usr/bin/env deno)
+  // Check if the value is a script (starts with shebang #!)
   if (isScript(value)) {
     return await executeScript(value, env);
   }

@@ -18,7 +18,7 @@ Deno.stdout.write(new TextEncoder().encode(timestamp));`;
 });
 
 Deno.test("executeScript - script with environment variables", async () => {
-  const script = `#!/usr/bin/env deno
+  const script = `#!/usr/bin/env -S deno run --allow-env
 const testVar = Deno.env.get("TEST_SCRIPT_VAR") || "default";
 Deno.stdout.write(new TextEncoder().encode("value:" + testVar));`;
 
@@ -133,7 +133,7 @@ Deno.test("processStringValue - complex script with dependencies", async () => {
     base_value: "hello"
   };
   
-  const value = `#!/usr/bin/env deno
+  const value = `#!/usr/bin/env -S deno run --allow-env
 const baseValue = Deno.env.get("base_value") || "default";
 const result = baseValue.toUpperCase() + "_PROCESSED";
 Deno.stdout.write(new TextEncoder().encode(result));`;

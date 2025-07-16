@@ -58,7 +58,7 @@ Deno.stdout.write(new TextEncoder().encode(message));`;
   });
 
   await t.step("executeScript - should pass environment variables to scripts", async () => {
-    const script = `#!/usr/bin/env deno
+    const script = `#!/usr/bin/env -S deno run --allow-env
 const value = Deno.env.get("TEST_SCRIPT_VAR") || "default";
 Deno.stdout.write(new TextEncoder().encode(value));`;
 
@@ -124,7 +124,7 @@ Deno.stdout.write(new TextEncoder().encode(nonce));`;
   });
 
   await t.step("executeScript - should generate signature using environment variables", async () => {
-    const script = `#!/usr/bin/env deno
+    const script = `#!/usr/bin/env -S deno run --allow-env
 import { encodeHex } from "jsr:@std/encoding/hex";
 const timestamp = Deno.env.get("timestamp") || "1234567890";
 const data = "test" + timestamp;

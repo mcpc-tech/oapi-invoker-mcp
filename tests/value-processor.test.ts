@@ -71,7 +71,7 @@ Deno.stdout.write(new TextEncoder().encode("script_result"));`
       "x-timestamp": `#!/usr/bin/env deno
 const ts = "1234567890";
 Deno.stdout.write(new TextEncoder().encode(ts));`,
-      "x-signature": `#!/usr/bin/env deno
+      "x-signature": `#!/usr/bin/env -S deno run --allow-env
 const timestamp = Deno.env.get("x_timestamp") || "unknown";
 const result = "sig_" + timestamp;
 Deno.stdout.write(new TextEncoder().encode(result));`

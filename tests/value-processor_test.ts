@@ -138,7 +138,7 @@ Deno.test("processRequestValues - header env variable passing", async () => {
   const headers = {
     "x-first": `#!/usr/bin/env deno
 Deno.stdout.write(new TextEncoder().encode("first-value"));`,
-    "x-second": `#!/usr/bin/env deno
+    "x-second": `#!/usr/bin/env -S deno run --allow-env
 const firstValue = Deno.env.get("x_first") || "not-found";
 Deno.stdout.write(new TextEncoder().encode("second-" + firstValue));`
   };

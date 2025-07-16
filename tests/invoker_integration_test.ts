@@ -24,6 +24,7 @@ Deno.test("invoke - basic functionality with processRequestValues", async () => 
   };
 
   const spec = {
+    "x-sensitive-params": {},
     "x-request-config": {
       baseUrl: "https://api.example.com",
       headers: {
@@ -38,7 +39,14 @@ Deno.test("invoke - basic functionality with processRequestValues", async () => 
     name: "test-tool",
     method: "get",
     path: "/test",
-    _rawOperation: {}
+    _rawOperation: undefined,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pathParams: { type: "object" as const, properties: {} },
+        inputParams: { type: "object" as const, properties: {} }
+      }
+    }
   };
 
   const params = {
@@ -49,11 +57,11 @@ Deno.test("invoke - basic functionality with processRequestValues", async () => 
   };
 
   try {
-    const result = await invoke(spec as any, extendTool as any, params);
+    const result = await invoke(spec, extendTool, params);
     
     assertEquals(result.status, 200);
     assertEquals(typeof result.data, "object");
-    assertEquals((result.data as any).success, true);
+    assertEquals((result.data as { success: boolean }).success, true);
   } finally {
     // Restore original fetch
     globalThis.fetch = originalFetch;
@@ -65,13 +73,14 @@ Deno.test("invoke - with script execution in headers", async () => {
   let capturedOptions: RequestInit | undefined;
 
   // Mock fetch to capture the request
-  globalThis.fetch = async (url: string | URL | Request, options?: RequestInit) => {
+  globalThis.fetch = (url: string | URL | Request, options?: RequestInit) => {
     capturedUrl = url.toString();
     capturedOptions = options;
-    return mockResponse({ message: "success" });
+    return Promise.resolve(mockResponse({ message: "success" }));
   };
 
   const spec = {
+    "x-sensitive-params": {},
     "x-request-config": {
       baseUrl: "https://api.example.com",
       headers: {
@@ -82,7 +91,7 @@ Deno.stdout.write(new TextEncoder().encode(timestamp));`,
         "x-nonce": `#!/usr/bin/env deno
 const nonce = Math.random().toString(36).substr(2, 8);
 Deno.stdout.write(new TextEncoder().encode(nonce));`,
-        "x-signature": `#!/usr/bin/env deno
+        "x-signature": `#!/usr/bin/env -S deno run --allow-env
 const timestamp = Deno.env.get("x_timestamp") || "";
 const data = "test" + timestamp;
 const messageBuffer = new TextEncoder().encode(data);
@@ -100,7 +109,14 @@ Deno.stdout.write(new TextEncoder().encode(hash));`
     name: "test-tool",
     method: "post",
     path: "/api/test",
-    _rawOperation: {}
+    _rawOperation: undefined,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pathParams: { type: "object" as const, properties: {} },
+        inputParams: { type: "object" as const, properties: {} }
+      }
+    }
   };
 
   const params = {
@@ -111,7 +127,7 @@ Deno.stdout.write(new TextEncoder().encode(hash));`
   };
 
   try {
-    const result = await invoke(spec as any, extendTool as any, params);
+    const result = await invoke(spec, extendTool, params);
     
     assertEquals(result.status, 200);
     assertStringIncludes(capturedUrl, "https://api.example.com/api/test");
@@ -138,12 +154,13 @@ Deno.test("invoke - with template variables", async () => {
   Deno.env.set("API_KEY", "test-api-key");
   Deno.env.set("USER_ID", "user123");
 
-  globalThis.fetch = async (_url: string | URL | Request, options?: RequestInit) => {
+  globalThis.fetch = (_url: string | URL | Request, options?: RequestInit) => {
     capturedOptions = options;
-    return mockResponse({ success: true });
+    return Promise.resolve(mockResponse({ success: true }));
   };
 
   const spec = {
+    "x-sensitive-params": {},
     "x-request-config": {
       baseUrl: "https://api.example.com",
       headers: {
@@ -158,7 +175,14 @@ Deno.test("invoke - with template variables", async () => {
     name: "test-tool",
     method: "get",
     path: "/user/{USER_ID}/profile",
-    _rawOperation: {}
+    _rawOperation: undefined,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pathParams: { type: "object" as const, properties: {} },
+        inputParams: { type: "object" as const, properties: {} }
+      }
+    }
   };
 
   const params = {
@@ -169,7 +193,7 @@ Deno.test("invoke - with template variables", async () => {
   };
 
   try {
-    const result = await invoke(spec as any, extendTool as any, params);
+    const result = await invoke(spec, extendTool, params);
     
     assertEquals(result.status, 200);
     
@@ -187,12 +211,13 @@ Deno.test("invoke - with template variables", async () => {
 Deno.test("invoke - with dynamic input parameters", async () => {
   let capturedOptions: RequestInit | undefined;
 
-  globalThis.fetch = async (_url: string | URL | Request, options?: RequestInit) => {
+  globalThis.fetch = (_url: string | URL | Request, options?: RequestInit) => {
     capturedOptions = options;
-    return mockResponse({ result: "processed" });
+    return Promise.resolve(mockResponse({ result: "processed" }));
   };
 
   const spec = {
+    "x-sensitive-params": {},
     "x-request-config": {
       baseUrl: "https://api.example.com",
       headers: {
@@ -206,7 +231,14 @@ Deno.test("invoke - with dynamic input parameters", async () => {
     name: "test-tool",
     method: "post",
     path: "/process",
-    _rawOperation: {}
+    _rawOperation: undefined,
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        pathParams: { type: "object" as const, properties: {} },
+        inputParams: { type: "object" as const, properties: {} }
+      }
+    }
   };
 
   const params = {
@@ -226,7 +258,7 @@ Deno.stdout.write(new TextEncoder().encode(id));`,
   };
 
   try {
-    const result = await invoke(spec as any, extendTool as any, params);
+    const result = await invoke(spec, extendTool, params);
     
     assertEquals(result.status, 200);
     
