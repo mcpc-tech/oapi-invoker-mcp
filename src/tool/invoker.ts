@@ -16,7 +16,7 @@ import {
   generateTencentCloudSignature,
   type TencentCloudAuthConfig,
 } from "./adapters/auth/tc3-hmac-sha256.ts";
-import type { OAPISpecDocument, OperationExtension } from "./parser.ts";
+import type { OAPISpecDocument } from "./parser.ts";
 import type { ExtendedAIToolSchema } from "./translator.ts";
 import { p } from "@mcpc/core";
 import { processRequestValues } from "./value-processor.ts";
@@ -31,6 +31,36 @@ interface InvokerResponse {
   raw: Response;
 }
 
+interface DebugInfo {
+  tool: {
+    name: string;
+    method: string;
+    path: string;
+    operationId?: string;
+  };
+  request: {
+    url: string;
+    finalHeaders: Record<string, string>;
+    body?: string;
+    timeout: number;
+    retries: number;
+  };
+  response: {
+    status: number;
+    statusText: string;
+    contentType: string;
+    headers: Record<string, string>;
+  };
+  processing: {
+    pathParams: Record<string, unknown>;
+    inputParams: Record<string, unknown>;
+    sensitiveParams: Record<string, unknown>;
+    usedProxy: boolean;
+    usedTencentCloudAuth: boolean;
+    pathRemapped: boolean;
+  };
+}
+
 /**
  * Invokes a tool by name with the provided parameters
  *
@@ -42,6 +72,7 @@ export async function invoke(
   params: { pathParams?: Record<string, unknown>; inputParams?: Record<string, unknown> },
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
+  const isDebugMode = Deno.env.get("OAPI_INVOKER_DEBUG") === "true";
 
   let { pathParams = {}, inputParams = {} } = params;
 
@@ -55,6 +86,39 @@ export async function invoke(
   const sensitiveParams = (_op["x-sensitive-params"] as Record<string, unknown>) ?? {};
 
   inputParams = extend(inputParams, sensitiveParams);
+
+  // Initialize debug info if debug mode is enabled
+  let debugInfo: DebugInfo | null = null;
+  if (isDebugMode) {
+    debugInfo = {
+      tool: {
+        name: extendTool.name,
+        method: method,
+        path: path,
+        operationId: _op.operationId as string | undefined,
+      },
+      request: {
+        url: "",
+        finalHeaders: {},
+        timeout,
+        retries,
+      },
+      response: {
+        status: 0,
+        statusText: "",
+        contentType: "",
+        headers: {},
+      },
+      processing: {
+        pathParams: cloneDeep(pathParams),
+        inputParams: cloneDeep(inputParams),
+        sensitiveParams: cloneDeep(sensitiveParams),
+        usedProxy: false,
+        usedTencentCloudAuth: false,
+        pathRemapped: false,
+      },
+    };
+  }
 
   if ((!specificUrl && !baseUrl) || !method || !path) {
     throw new Error("Invalid tool configuration");
@@ -78,6 +142,9 @@ export async function invoke(
   const pathItems = path.split("/").slice(1);
   const pathRemaps = _op["x-remap-path-to-header"] as string[] | undefined;
   if (pathRemaps) {
+    if (debugInfo) {
+      debugInfo.processing.pathRemapped = true;
+    }
     for (const headerKey of pathRemaps) {
       const currVal = pathItems.shift();
       if (currVal) {
@@ -110,6 +177,10 @@ export async function invoke(
     spec.components?.securitySchemes?.TencentCloudAuth &&
     requestConfigGlobal.auth?.TencentCloudAuth
   ) {
+    if (debugInfo) {
+      debugInfo.processing.usedTencentCloudAuth = true;
+    }
+    
     const authConfig = requestConfigGlobal.auth
       .TencentCloudAuth as TencentCloudAuthConfig;
 
@@ -134,10 +205,20 @@ export async function invoke(
   }
 
   if (requestConfigGlobal.proxy) {
+    if (debugInfo) {
+      debugInfo.processing.usedProxy = true;
+    }
     const proxyConfig = requestConfigGlobal.proxy;
     const newUrl = new URL(proxyConfig.url);
     newUrl.searchParams.set(proxyConfig.param, url.toString());
     url = newUrl;
+  }
+
+  // Update debug info with final request details
+  if (debugInfo) {
+    debugInfo.request.url = url.toString();
+    debugInfo.request.finalHeaders = { ...requestHeaders };
+    debugInfo.request.body = requestBody ?? undefined;
   }
 
   const requestOptions: RequestInit = {
@@ -190,8 +271,30 @@ export async function invoke(
     data = await response.text();
   }
 
+  // Update debug info with response details
+  if (debugInfo) {
+    debugInfo.response.status = response.status;
+    debugInfo.response.statusText = response.statusText;
+    debugInfo.response.contentType = contentType;
+    response.headers.forEach((value, key) => {
+      debugInfo!.response.headers[key] = value;
+    });
+  }
+
   // Post process response
   data = postProcess(spec, extendTool, data);
+
+  // Append debug info to data if debug mode is enabled
+  if (isDebugMode && debugInfo) {
+    if (isObject(data) && !isNull(data)) {
+      (data as Record<string, unknown>)["_debug"] = debugInfo;
+    } else {
+      data = {
+        originalData: data,
+        _debug: debugInfo,
+      };
+    }
+  }
 
   // Create response object
   const headerObj: Record<string, string> = {};
