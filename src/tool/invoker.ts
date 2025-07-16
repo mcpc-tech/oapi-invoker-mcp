@@ -20,6 +20,7 @@ import type { OAPISpecDocument } from "./parser.ts";
 import type { ExtendedAIToolSchema } from "./translator.ts";
 import { p } from "@mcpc/core";
 import { processRequestValues } from "./value-processor.ts";
+import process from "node:process";
 
 export const SENSITIVE_MARK = "*SENSITIVE*";
 
@@ -69,10 +70,13 @@ interface DebugInfo {
 export async function invoke(
   spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
-  params: { pathParams?: Record<string, unknown>; inputParams?: Record<string, unknown> },
+  params: {
+    pathParams?: Record<string, unknown>;
+    inputParams?: Record<string, unknown>;
+  }
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
-  const isDebugMode = Deno.env.get("OAPI_INVOKER_DEBUG") === "true";
+  const isDebugMode = process.env["OAPI_INVOKER_DEBUG"] === "1";
 
   let { pathParams = {}, inputParams = {} } = params;
 
@@ -83,7 +87,8 @@ export async function invoke(
   const path = p(extendTool.path!)({ ...pathParams });
   const _op = (extendTool._rawOperation || {}) as Record<string, unknown>;
   const specificUrl = _op["x-custom-base-url"] as string | undefined;
-  const sensitiveParams = (_op["x-sensitive-params"] as Record<string, unknown>) ?? {};
+  const sensitiveParams =
+    (_op["x-sensitive-params"] as Record<string, unknown>) ?? {};
 
   inputParams = extend(inputParams, sensitiveParams);
 
@@ -131,7 +136,7 @@ export async function invoke(
   const processed = await processRequestValues(
     requestHeaders,
     pathParams,
-    inputParams,
+    inputParams
   );
   requestHeaders = processed.headers;
   pathParams = processed.pathParams;
@@ -182,7 +187,7 @@ export async function invoke(
     if (debugInfo) {
       debugInfo.processing.usedTencentCloudAuth = true;
     }
-    
+
     const authConfig = requestConfigGlobal.auth
       .TencentCloudAuth as TencentCloudAuthConfig;
 
@@ -202,7 +207,7 @@ export async function invoke(
       url.searchParams,
       requestHeaders,
       requestBody,
-      authConfig,
+      authConfig
     );
   }
 
@@ -244,14 +249,14 @@ export async function invoke(
     } catch (err) {
       error = err as Error;
       console.error(
-        `Attempt ${
-          attempt + 1
-        } failed for tool ${extendTool.name}: ${error.message}`,
-        error,
+        `Attempt ${attempt + 1} failed for tool ${extendTool.name}: ${
+          error.message
+        }`,
+        error
       );
       if (attempt === retries) {
         throw new Error(
-          `Failed to invoke tool ${extendTool.name}: ${error.message}`,
+          `Failed to invoke tool ${extendTool.name}: ${error.message}`
         );
       }
       // Wait before retrying (exponential backoff)
@@ -322,7 +327,7 @@ function transformItem(
   item: any,
   includeKeys: string[],
   excludeKeys: string[],
-  sensitiveKeys: string[],
+  sensitiveKeys: string[]
 ): any {
   // If item is not an object or is null, transformations do not apply.
   if (!isObject(item) || isNull(item)) {
@@ -348,7 +353,7 @@ function transformItem(
           }
           return acc;
         },
-        {}, // Initial accumulator is an empty object
+        {} // Initial accumulator is an empty object
       );
     }
     return cloneDeep(originalItem); // Use _.cloneDeep
@@ -429,7 +434,7 @@ function transformItem(
         }
         return acc;
       },
-      currentProcessedItem, // Start with the currentProcessedItem
+      currentProcessedItem // Start with the currentProcessedItem
     );
   };
 
@@ -445,7 +450,7 @@ function transformItem(
 export function postProcess(
   _spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
-  data: unknown,
+  data: unknown
 ): unknown {
   const responseConfigGlobal = _spec["x-response-config"] || {};
   const op = extendTool._rawOperation;
@@ -454,10 +459,12 @@ export function postProcess(
       return data;
     }
 
-    const includeResponseKeys: string[] = op["x-include-response-keys"] ||
+    const includeResponseKeys: string[] =
+      op["x-include-response-keys"] ||
       responseConfigGlobal["includeResponseKeys"] ||
       [];
-    const excludeResponseKeys: string[] = op["x-exclude-response-keys"] ||
+    const excludeResponseKeys: string[] =
+      op["x-exclude-response-keys"] ||
       responseConfigGlobal["excludeResponseKeys"] ||
       [];
     const sensitiveResponseFields: string[] =
@@ -483,7 +490,7 @@ export function postProcess(
         currentItem,
         includeResponseKeys,
         excludeResponseKeys,
-        sensitiveResponseFields,
+        sensitiveResponseFields
       );
     });
 
@@ -505,8 +512,7 @@ function truncateData(data: unknown, maxLength?: number): unknown {
   }
 
   return {
-    message:
-      `Response was truncated (length: ${stringified.length}, max: ${maxLength})`,
+    message: `Response was truncated (length: ${stringified.length}, max: ${maxLength})`,
     truncatedData: stringified.slice(0, maxLength) + "...",
   };
 }

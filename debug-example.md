@@ -4,16 +4,16 @@ The OAPI Invoker MCP now includes a debug mode that provides detailed informatio
 
 ## Enabling Debug Mode
 
-Set the environment variable `OAPI_INVOKER_DEBUG=true` to enable debug mode:
+Set the environment variable `OAPI_INVOKER_DEBUG=1` to enable debug mode:
 
 ```bash
-export OAPI_INVOKER_DEBUG=true
+export OAPI_INVOKER_DEBUG=1
 ```
 
 or when running your application:
 
 ```bash
-OAPI_INVOKER_DEBUG=true deno run your-app.ts
+OAPI_INVOKER_DEBUG=1 deno run your-app.ts
 ```
 
 ## Debug Information Structure
