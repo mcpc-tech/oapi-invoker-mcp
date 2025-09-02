@@ -37,7 +37,10 @@ export function setUpMcpServer(
             },
           ].concat(
             res.debugInfo
-              ? [{ type: "text", text: JSON.stringify(res.debugInfo) }]
+              ? [{
+                type: "text",
+                text: JSON.stringify({ debug: res.debugInfo }),
+              }]
               : [],
           ),
         };
