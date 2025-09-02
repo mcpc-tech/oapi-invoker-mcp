@@ -1,0 +1,106 @@
+# GitHub API Complete Feature Example
+# Simple, practical demonstration of all oapi-invoker-mcp features
+
+# Basic tool configuration
+x-tool-name-format: "{method}-{operationId}"
+x-tool-name-prefix: "github-"
+
+# Request setup
+x-request-config:
+  baseUrl: "https://api.github.com"
+  headers:
+    "Accept": "application/vnd.github.v3+json"
+    "Authorization": "Bearer {GITHUB_TOKEN}"
+    "X-GitHub-Api-Version": "2022-11-28"
+
+    # Dynamic timestamp
+    "X-Request-Time": |
+      #!/usr/bin/env deno
+      Deno.stdout.write(new TextEncoder().encode(new Date().toISOString()));
+
+    # Unique request ID
+    "X-Request-ID": |
+      #!/usr/bin/env node
+      process.stdout.write(crypto.randomUUID());
+
+  timeout: 30000
+
+# Filter only useful operations
+x-filter-rules:
+  - pathPattern: "^/repos/.*"
+    methodPattern: "^(get|post|patch)$"
+    exclude: false
+  - pathPattern: "^/user"
+    exclude: false
+  - pathPattern: "^/search/.*"
+    exclude: false
+  - pathPattern: "^/admin/.*"
+    exclude: true
+
+# Protect sensitive data
+x-sensitive-params:
+  headers: ["Authorization"]
+  query: ["access_token"]
+
+# Keep responses manageable
+x-response-config:
+  maxLength: 20000
+  sensitiveResponseFields: ["token", "password", "private_key"]
+
+# Operation examples
+paths:
+  "/repos/{owner}/{repo}":
+    get:
+      x-examples:
+        - "Get repository information"
+        - |
+            Simple usage:
+            inputParams: {
+              "owner": "mcpc-tech",
+              "repo": "oapi-invoker-mcp"
+            }
+        - |
+            With URL encoding:
+            inputParams: {
+              "owner": "mcpc-tech",
+              "repo": "#!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent('oapi-invoker-mcp'));"
+            }
+
+  "/repos/{owner}/{repo}/issues":
+    get:
+      x-examples:
+        - "List repository issues"
+        - |
+            With dynamic labels:
+            inputParams: {
+              "state": "open",
+              "labels": "#!/usr/bin/env node\nconst labels = ['bug', 'help wanted'];\nprocess.stdout.write(encodeURIComponent(labels.join(',')));"
+            }
+
+    post:
+      x-examples:
+        - "Create new issue"
+        - |
+            With template variables:
+            inputParams: {
+              "title": "#!/usr/bin/env deno\nconst title = Deno.env.get('ISSUE_TITLE') || 'New Issue';\nDeno.stdout.write(new TextEncoder().encode(title));",
+              "body": "Issue description here",
+              "labels": ["bug"]
+            }
+
+  "/search/repositories":
+    get:
+      x-examples:
+        - "Search repositories"
+        - |
+            With encoded query:
+            inputParams: {
+              "q": "#!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent('language:typescript stars:>100'));",
+              "sort": "stars"
+            }
+
+  "/user":
+    get:
+      x-examples:
+        - "Get current user"
+      x-sensitive-response-fields: ["email", "private_repos"]

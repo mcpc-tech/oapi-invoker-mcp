@@ -27,7 +27,7 @@ export function generateTencentCloudSignature(
   query: URLSearchParams,
   headers: Record<string, string>,
   body: string | null,
-  authConfig: TencentCloudAuthConfig
+  authConfig: TencentCloudAuthConfig,
 ): Record<string, string | number> {
   const timestamp = Math.floor(Date.now() / 1000);
   const date = getDate(timestamp);
@@ -82,7 +82,7 @@ export function generateTencentCloudSignature(
     .sort(([keyA], [keyB]) => keyA.localeCompare(keyB))
     .map(
       ([key, value]) =>
-        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`
+        `${encodeURIComponent(key)}=${encodeURIComponent(value)}`,
     )
     .join("&");
 
@@ -113,7 +113,8 @@ export function generateTencentCloudSignature(
   const signature = sha256(stringToSign, secretSigning, "hex");
 
   // Build authorization header
-  const authorization = `TC3-HMAC-SHA256 Credential=${authConfig.secretId}/${credentialScope}, SignedHeaders=${signedHeadersString}, Signature=${signature}`;
+  const authorization =
+    `TC3-HMAC-SHA256 Credential=${authConfig.secretId}/${credentialScope}, SignedHeaders=${signedHeadersString}, Signature=${signature}`;
 
   // Return all required headers
   const resultHeaders: Record<string, string | number> = {
@@ -145,7 +146,7 @@ export function generateTencentCloudSignature(
 function sha256(
   message: string,
   secret: string | Buffer,
-  encoding?: string
+  encoding?: string,
 ): string {
   const hmac = createHmac("sha256", secret);
   return hmac.update(message).digest(encoding as any);

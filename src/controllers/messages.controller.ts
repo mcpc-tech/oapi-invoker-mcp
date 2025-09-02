@@ -38,8 +38,8 @@ export const messageHandler = (app: OpenAPIHono) =>
             code: 400,
             message: result.error.message,
           },
-          400
+          400,
         );
       }
-    }
+    },
   );

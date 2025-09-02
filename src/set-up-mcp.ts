@@ -2,15 +2,15 @@ import { ComposableMCPServer } from "@mcpc/core";
 
 import { parseOAPISpecWithExtensions } from "./tool/parser.ts";
 import { openapiToAIToolSchema } from "./tool/translator.ts";
-import { invoke } from "./tool/invoker.ts";
-import { jsonSchema, Schema } from "ai";
+import { invoke, type InvokerParams } from "./tool/invoker.ts";
+import { jsonSchema, type Schema } from "ai";
 
 export const INCOMING_MSG_ROUTE_PATH = "/oapi/messages";
 
 const specification = await parseOAPISpecWithExtensions({});
 
 const { standardTools, toolToExtendInfo } = await openapiToAIToolSchema(
-  specification
+  specification,
 );
 
 export function setUpMcpServer(
@@ -22,12 +22,12 @@ export function setUpMcpServer(
     server.tool(
       tool.name,
       tool.description ?? "",
-      jsonSchema(tool.inputSchema as any),
-      async (inputParams, extra) => {
+      jsonSchema(tool.inputSchema as unknown as Schema),
+      async (params, extra) => {
         const res = await invoke(
           specification,
           toolToExtendInfo[tool.name],
-          inputParams as any
+          params as InvokerParams,
         );
         return {
           content: [
@@ -35,9 +35,13 @@ export function setUpMcpServer(
               type: "text",
               text: JSON.stringify(res.data),
             },
-          ],
+          ].concat(
+            res.debugInfo
+              ? [{ type: "text", text: JSON.stringify(res.debugInfo) }]
+              : [],
+          ),
         };
-      }
+      },
     );
   });
 

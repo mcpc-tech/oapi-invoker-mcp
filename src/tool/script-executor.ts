@@ -1,8 +1,8 @@
-import { promises as fs } from 'node:fs';
-import { spawn } from 'node:child_process';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import process from 'node:process';
+import { promises as fs } from "node:fs";
+import { spawn } from "node:child_process";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import process from "node:process";
 
 /**
  * Script execution utilities for OAPI Invoker
@@ -14,38 +14,45 @@ import process from 'node:process';
  */
 export async function executeScript(
   script: string,
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
 ): Promise<string> {
   try {
     // Create a temporary file for the script using tmpdir
     const tempDir = tmpdir();
-    const tempFile = join(tempDir, `script_${Date.now()}_${Math.random()
-      .toString(36)
-      .substr(2)}`);
+    const tempFile = join(
+      tempDir,
+      `script_${Date.now()}_${
+        Math.random()
+          .toString(36)
+          .substr(2)
+      }`,
+    );
 
     // Write script to temporary file with executable permissions
     await fs.writeFile(tempFile, script, { mode: 0o755 });
 
     // Execute the script file directly using shebang
-    const result = await new Promise<{ code: number; stdout: string; stderr: string }>((resolve, reject) => {
+    const result = await new Promise<
+      { code: number; stdout: string; stderr: string }
+    >((resolve, reject) => {
       const child = spawn(tempFile, [], {
         env: { ...process.env, ...env },
-        stdio: ['pipe', 'pipe', 'pipe']
+        stdio: ["pipe", "pipe", "pipe"],
       });
 
-      let stdout = '';
-      let stderr = '';
+      let stdout = "";
+      let stderr = "";
 
-      child.stdout?.on('data', (data) => {
+      child.stdout?.on("data", (data) => {
         stdout += data.toString();
       });
 
-      child.stderr?.on('data', (data) => {
+      child.stderr?.on("data", (data) => {
         stderr += data.toString();
       });
 
-      child.on('error', reject);
-      child.on('close', (code) => {
+      child.on("error", reject);
+      child.on("close", (code) => {
         resolve({ code: code || 0, stdout, stderr });
       });
     });
@@ -83,7 +90,7 @@ export function isScript(value: unknown): value is string {
  */
 export function processTemplateVariables(
   value: string,
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
 ): string {
   const templateRegex = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
@@ -97,7 +104,7 @@ export function processTemplateVariables(
  */
 export async function processStringValue(
   value: string,
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
 ): Promise<string> {
   console.log("Processing string value:", value, env);
   // Check if the value is a script (starts with shebang #!)

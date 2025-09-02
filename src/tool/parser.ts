@@ -21,7 +21,7 @@ const ToolOptionsSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Format string for generating tool names, e.g. '{method}-{path}' or '{operationId}'"
+      "Format string for generating tool names, e.g. '{method}-{path}' or '{operationId}'",
     ),
   "x-tool-name-prefix": z
     .string()
@@ -58,7 +58,7 @@ const FilterRulesSchema = z.object({
           .boolean()
           .optional()
           .describe("Exclude matching operations instead of including them"),
-      })
+      }),
     )
     .optional()
     .describe("Rules to determine which operations to include"),

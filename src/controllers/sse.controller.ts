@@ -1,4 +1,4 @@
-import { createRoute, z, type OpenAPIHono } from "@hono/zod-openapi";
+import { createRoute, type OpenAPIHono, z } from "@hono/zod-openapi";
 import type { ErrorSchema as _ErrorSchema } from "../schemas/error.ts";
 import { handleConnecting } from "@mcpc/core";
 import { server } from "../app.ts";
@@ -32,7 +32,7 @@ export const sseHandler = (app: OpenAPIHono) =>
       const response = await handleConnecting(
         c.req.raw,
         server,
-        INCOMING_MSG_ROUTE_PATH
+        INCOMING_MSG_ROUTE_PATH,
       );
       return response;
     },
@@ -43,8 +43,8 @@ export const sseHandler = (app: OpenAPIHono) =>
             code: 400,
             message: result.error.message,
           },
-          400
+          400,
         );
       }
-    }
+    },
   );

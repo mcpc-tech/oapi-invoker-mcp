@@ -8,7 +8,7 @@ export const server: ComposableMCPServer = setUpMcpServer(
     name: "oapi-invoker-mcp",
     version: "0.1.0",
   },
-  { capabilities: { tools: {} } }
+  { capabilities: { tools: {} } },
 );
 
 export const createApp: () => OpenAPIHono = () => {

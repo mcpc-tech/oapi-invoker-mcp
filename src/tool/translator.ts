@@ -7,6 +7,7 @@
  * 5. Properly extracts path parameters from URL paths like /api/v3/projects/{id_or_path}/repository/tags/{tag}
  * 6. Separates pathParams and inputParams in the schema
  * 7. Includes response definitions as hidden parameters
+ * 8. Supports dynamic headers with script execution and template variables
  */
 import type { ToolSchema } from "@modelcontextprotocol/sdk/types.js";
 import type { z } from "zod";
@@ -35,6 +36,7 @@ export interface ExtendedAIToolSchema extends AIToolSchema {
     properties: {
       pathParams: AIToolSchema["inputSchema"];
       inputParams: AIToolSchema["inputSchema"];
+      headerParams: AIToolSchema["inputSchema"];
     };
     required?: string[];
   };
@@ -58,18 +60,17 @@ function createBasicToolSchema(
   method: string,
   path: string,
   operation: OAPIOperation,
-  specification: OAPISpecDocument
+  specification: OAPISpecDocument,
 ): ExtendedAIToolSchema {
   // Helper function to format a single response entry
   const formatResponse = ([code, response]: any) => {
-    const schema =
-      response.content?.["application/json"]?.schema ||
+    const schema = response.content?.["application/json"]?.schema ||
       response.content?.["*/*"]?.schema ||
       response.schema;
     const schemaInfo = schema
       ? p(` (schema: {schema})`)({
-          schema: JSON.stringify(schema),
-        })
+        schema: JSON.stringify(schema),
+      })
       : "";
     return `${code}: ${response.description || "No description"}${schemaInfo}`;
   };
@@ -97,24 +98,26 @@ function createBasicToolSchema(
   const name = formatToolName();
 
   const description = p(
-    `
-Call this tool for {description}
-- Action: call API {name}
+    `{description}
+
+API Endpoint: {method} {path}
 {tags}
-{examples}`
+{examples}
+
+Use this tool to make HTTP requests to the API endpoint. The tool will handle authentication, parameter processing, and response formatting automatically.
+
+Parameter Usage:
+- pathParams: Required for URLs with path variables - provide the actual values to replace URL path placeholders
+- inputParams: Optional request data - query parameters, JSON body fields, or form data for the API call
+- headerParams: Optional HTTP headers - authentication tokens, content types, or custom headers needed by the API`,
   )({
-    examples,
-    name,
-    description:
-      operation.description ||
+    examples: examples ? `\nExamples:\n${examples}` : "",
+    method: method.toUpperCase(),
+    path,
+    description: operation.description ||
       operation.summary ||
-      `${method.toUpperCase()} ${path}`,
-    tags: operation.tags ? `Categories: ${operation.tags.join(", ")}.` : "",
-    // responses: operation.responses
-    //   ? `Possible responses: ${Object.entries(operation.responses)
-    //       .map(formatResponse)
-    //       .join("; ")}.`
-    //   : "",
+      `Execute ${method.toUpperCase()} request to ${path}`,
+    tags: operation.tags ? `\nCategories: ${operation.tags.join(", ")}` : "",
   });
 
   return {
@@ -125,13 +128,22 @@ Call this tool for {description}
       properties: {
         pathParams: {
           type: "object",
-          description: `URL path parameters that will be replaced in the request endpoint.`,
+          description:
+            `Path parameters from the URL route. These are the values that replace {paramName} placeholders in the API path. Required for endpoints with dynamic segments.`,
           properties: {},
           required: [],
         },
         inputParams: {
           type: "object",
-          description: `Input parameters for the request.`,
+          description:
+            `Request parameters including query parameters, request body fields, and form data. Supports static values, template variables (e.g., {API_KEY}), and dynamic scripts for computed values. Scripts can be Node.js (#!/usr/bin/env node) or Deno (#!/usr/bin/env deno) for complex processing like URL encoding.`,
+          properties: {},
+          required: [],
+        },
+        headerParams: {
+          type: "object",
+          description:
+            `HTTP headers to include in the request. Supports static values, environment variables via templates (e.g., {API_TOKEN}), and dynamic scripts for computed headers like timestamps or signatures. Use Node.js/Deno scripts for complex header generation.`,
           properties: {},
           required: [],
         },
@@ -150,7 +162,7 @@ Call this tool for {description}
  */
 function processPathParameters(
   tool: ExtendedAIToolSchema,
-  pathParams: string[]
+  pathParams: string[],
 ): void {
   const pathParamProperties = tool.inputSchema.properties.pathParams.properties;
   const pathParamRequired = tool.inputSchema.properties.pathParams
@@ -188,7 +200,7 @@ function processPathParameters(
  */
 function processOperationParameters(
   tool: ExtendedAIToolSchema,
-  operation: OpenAPI.Operation
+  operation: OpenAPI.Operation,
 ): void {
   if (!operation.parameters) return;
   const sensitiveKV = operation["x-sensitive-params"] ?? {};
@@ -217,6 +229,8 @@ function processOperationParameters(
 
     if (typedParam.in === "path") {
       // processPathParameter(tool, typedParam, paramType, paramDescription);
+    } else if (typedParam.in === "header") {
+      processHeaderParameter(tool, typedParam, paramType, paramDescription);
     } else if (["query", "body", "formData"].includes(typedParam.in)) {
       processInputParameter(tool, typedParam, paramType, paramDescription);
     }
@@ -230,7 +244,7 @@ function processInputParameter(
   tool: ExtendedAIToolSchema,
   param: OpenAPI.Parameter,
   paramType: string,
-  paramDescription: string
+  paramDescription: string,
 ): void {
   if (!tool.inputSchema.properties.inputParams.properties) {
     tool.inputSchema.properties.inputParams.properties = {};
@@ -273,11 +287,59 @@ function processInputParameter(
 }
 
 /**
+ * Processes a header parameter
+ */
+function processHeaderParameter(
+  tool: ExtendedAIToolSchema,
+  param: OpenAPI.Parameter,
+  paramType: string,
+  paramDescription: string,
+): void {
+  if (!tool.inputSchema.properties.headerParams.properties) {
+    tool.inputSchema.properties.headerParams.properties = {};
+  }
+
+  if (!tool.inputSchema.properties.headerParams.required) {
+    tool.inputSchema.properties.headerParams.required = [];
+  }
+
+  if (!tool.inputSchema.required) {
+    tool.inputSchema.required = [];
+  }
+
+  const headerProperties = tool.inputSchema.properties.headerParams.properties;
+  const headerRequired = tool.inputSchema.properties.headerParams
+    .required as string[];
+
+  if (paramType === SENSITIVE_MARK) {
+    headerProperties[param.name] = {
+      const: SENSITIVE_MARK,
+      description: paramDescription,
+    };
+  } else {
+    headerProperties[param.name] = {
+      type: paramType,
+      description: paramDescription,
+    };
+  }
+
+  // Add to required list if parameter is required
+  if (param.required) {
+    headerRequired.push(param.name);
+
+    // If headerParams has required fields, make headerParams itself required
+    if (!tool.inputSchema.required.includes("headerParams")) {
+      tool.inputSchema.required.push("headerParams");
+    }
+  }
+}
+
+/**
  * Processes request body from OpenAPI v3 spec
  */
 function processRequestBody(
   tool: ExtendedAIToolSchema,
-  operation: OpenAPI.Operation
+  operation: OpenAPI.Operation,
 ): void {
   if (!operation.requestBody) return;
 
@@ -323,7 +385,7 @@ function processRequestBody(
  */
 function processResponseSchemas(
   tool: ExtendedAIToolSchema,
-  operation: OpenAPI.Operation
+  operation: OpenAPI.Operation,
 ): void {
   if (!operation.responses) return;
 
@@ -341,8 +403,7 @@ function processResponseSchemas(
       (typedResponse.content["application/json"]?.schema ||
         typedResponse.content["*/*"]?.schema)
     ) {
-      schema =
-        typedResponse.content["application/json"]?.schema ||
+      schema = typedResponse.content["application/json"]?.schema ||
         typedResponse.content["*/*"]?.schema;
     } else if ("schema" in typedResponse && typedResponse.schema) {
       // OpenAPI v2 style
@@ -356,7 +417,7 @@ function processResponseSchemas(
 }
 
 export async function openapiToAIToolSchema(
-  specification: OAPISpecDocument
+  specification: OAPISpecDocument,
 ): Promise<AIToolSchemaRes> {
   let tools: Array<ExtendedAIToolSchema> = [];
   // Extract paths from the OpenAPI spec
@@ -376,12 +437,11 @@ export async function openapiToAIToolSchema(
           method as keyof typeof pathItem
         ] as OAPIOperation;
 
-        // Create basic tool schema
         const tool = createBasicToolSchema(
           method,
           path,
           operation,
-          specification
+          specification,
         );
 
         // Process response schemas with specification for ref resolution
@@ -441,7 +501,7 @@ export async function openapiToAIToolSchema(
 
 // Helper function to ensure unique tool names
 function ensureUniqueToolNames(
-  tools: ExtendedAIToolSchema[]
+  tools: ExtendedAIToolSchema[],
 ): ExtendedAIToolSchema[] {
   const nameCount: Record<string, number> = {};
 
