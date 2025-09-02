@@ -1,8 +1,9 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { registerAgent } from "./controllers/register.ts";
 import { setUpMcpServer } from "./set-up-mcp.ts";
+import { ComposableMCPServer } from "@mcpc/core";
 
-export const createServer = async () =>
+export const createServer: () => Promise<ComposableMCPServer> = async () =>
   setUpMcpServer(
     {
       name: "oapi-invoker-mcp",
