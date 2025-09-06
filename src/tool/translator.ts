@@ -107,9 +107,13 @@ API Endpoint: {method} {path}
 Use this tool to make HTTP requests to the API endpoint. The tool will handle authentication, parameter processing, and response formatting automatically.
 
 Parameter Usage:
-- pathParams: Required for URLs with path variables - provide the actual values to replace URL path placeholders
-- inputParams: Optional request data - query parameters, JSON body fields, or form data for the API call
-- headerParams: Optional HTTP headers - authentication tokens, content types, or custom headers needed by the API`,
+- pathParams: Required for URLs with placeholders. Provide concrete values.
+- inputParams: Required for query/body/form data. Provide as needed.
+- headerParams: Optional. Mainly for dynamic headers - omit to use global headers automatically.
+
+Values can be strings or executable scripts for dynamic computation.
+Use scripts only when transformation/computation is needed (encoding, timestamps, etc).
+Script format: #!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent("a/b"))`,
   )({
     examples: examples ? `\nExamples:\n${examples}` : "",
     method: method.toUpperCase(),
@@ -129,21 +133,21 @@ Parameter Usage:
         pathParams: {
           type: "object",
           description:
-            `Path parameters from the URL route. These are the values that replace {paramName} placeholders in the API path. Required for endpoints with dynamic segments.`,
+            `URL path variables. Provide string values or scripts for placeholders in the path. Required when path has variables.`,
           properties: {},
           required: [],
         },
         inputParams: {
           type: "object",
           description:
-            `Request parameters including query parameters, request body fields, and form data. Supports static values, template variables (e.g., {API_KEY}), and dynamic scripts for computed values. Scripts can be Node.js (#!/usr/bin/env node) or Deno (#!/usr/bin/env deno) for complex processing like URL encoding.`,
+            `Request data for the API call. Provide string values or scripts for query parameters, body fields, or form data.`,
           properties: {},
           required: [],
         },
         headerParams: {
           type: "object",
           description:
-            `HTTP headers to include in the request. Supports static values, environment variables via templates (e.g., {API_TOKEN}), and dynamic scripts for computed headers like timestamps or signatures. Use Node.js/Deno scripts for complex header generation.`,
+            `HTTP headers for dynamic values only. Omit to use global headers automatically.`,
           properties: {},
           required: [],
         },
