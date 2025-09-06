@@ -19,7 +19,7 @@ import {
 import type { OAPISpecDocument } from "./parser.ts";
 import type { ExtendedAIToolSchema } from "./translator.ts";
 import { p } from "@mcpc/core";
-import { processRequestValues } from "./value-processor.ts";
+import { processRequestValues, processValue } from "./value-processor.ts";
 import process from "node:process";
 
 export const SENSITIVE_MARK = "*SENSITIVE*";
@@ -88,7 +88,11 @@ export async function invoke(
   const { headers = {}, timeout = 30000, retries = 0 } = requestConfigGlobal;
 
   const method = extendTool.method?.toLowerCase() || "get";
-  const path = p(extendTool.path!)({ ...pathParams });
+  
+  // Process pathParams scripts before path construction
+  const processedPathParams = await processValue(pathParams) as Record<string, unknown>;
+  
+  const path = p(extendTool.path!)(processedPathParams);
   const _op = (extendTool._rawOperation || {}) as Record<string, unknown>;
   const specificUrl = _op["x-custom-base-url"] as string | undefined;
   const sensitiveParams =
@@ -119,7 +123,7 @@ export async function invoke(
         headers: {},
       },
       processing: {
-        pathParams: cloneDeep(pathParams),
+        pathParams: cloneDeep(processedPathParams),
         inputParams: cloneDeep(inputParams),
         sensitiveParams: cloneDeep(sensitiveParams),
         usedProxy: false,
@@ -136,15 +140,15 @@ export async function invoke(
   let requestHeaders = { ...headers };
   let requestBody: string | null = null;
 
-  // Process all values including headers, pathParams, and inputParams
+  // Process remaining values (headers, inputParams, headerParams)
   const processed = await processRequestValues(
     requestHeaders,
-    pathParams,
+    {}, // pathParams already processed above
     inputParams,
     headerParams,
   );
   requestHeaders = processed.headers;
-  pathParams = processed.pathParams;
+  pathParams = processedPathParams; // Use the already processed pathParams
   inputParams = processed.inputParams;
   const processedHeaders = processed.headerParams || {};
 
