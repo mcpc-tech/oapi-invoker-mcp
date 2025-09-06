@@ -11,10 +11,12 @@ let capturedUrl = "";
 // Simple mock fetch
 globalThis.fetch = ((url: RequestInfo | URL) => {
   capturedUrl = url.toString();
-  return Promise.resolve(new Response('{"success": true}', {
-    status: 200,
-    headers: { 'content-type': 'application/json' }
-  }));
+  return Promise.resolve(
+    new Response('{"success": true}', {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }),
+  );
 }) as typeof fetch;
 
 // Helper to create test objects
@@ -47,45 +49,47 @@ function createTestTool(path: string): ExtendedAIToolSchema {
 }
 
 Deno.test("pathParams executes scripts correctly", async () => {
-  const script = "#!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent('TCBTeam/agents'))";
-  
+  const script =
+    "#!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent('TCBTeam/agents'))";
+
   await invoke(
-    createTestSpec(), 
+    createTestSpec(),
     createTestTool("/projects/{id_or_path}/tags/{tag}"),
     {
       pathParams: {
         id_or_path: script,
-        tag: "v1.0.0"
-      }
-    }
+        tag: "v1.0.0",
+      },
+    },
   );
 
   const expected = "TCBTeam%2Fagents"; // encodeURIComponent('TCBTeam/agents')
   assertEquals(
-    capturedUrl.includes(`/projects/${expected}/tags/v1.0.0`), 
+    capturedUrl.includes(`/projects/${expected}/tags/v1.0.0`),
     true,
-    `URL should contain encoded value: ${expected}`
+    `URL should contain encoded value: ${expected}`,
   );
 });
 
 Deno.test("pathParams handles mixed script and static values", async () => {
-  const script = "#!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent('My Project'))";
-  
+  const script =
+    "#!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent('My Project'))";
+
   await invoke(
     createTestSpec(),
     createTestTool("/users/{user_id}/projects/{name}"),
     {
       pathParams: {
         user_id: "123",
-        name: script
-      }
-    }
+        name: script,
+      },
+    },
   );
 
   const expected = "My%20Project"; // encodeURIComponent('My Project')
   assertEquals(
     capturedUrl.includes(`/users/123/projects/${expected}`),
     true,
-    `URL should contain both static and encoded values`
+    `URL should contain both static and encoded values`,
   );
 });

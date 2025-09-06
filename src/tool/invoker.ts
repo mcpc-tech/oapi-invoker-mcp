@@ -88,10 +88,13 @@ export async function invoke(
   const { headers = {}, timeout = 30000, retries = 0 } = requestConfigGlobal;
 
   const method = extendTool.method?.toLowerCase() || "get";
-  
+
   // Process pathParams scripts before path construction
-  const processedPathParams = await processValue(pathParams) as Record<string, unknown>;
-  
+  const processedPathParams = await processValue(pathParams) as Record<
+    string,
+    unknown
+  >;
+
   const path = p(extendTool.path!)(processedPathParams);
   const _op = (extendTool._rawOperation || {}) as Record<string, unknown>;
   const specificUrl = _op["x-custom-base-url"] as string | undefined;

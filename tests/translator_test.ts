@@ -22,7 +22,7 @@ Deno.test("translator - basic OpenAPI conversion", async () => {
   const result = await openapiToAIToolSchema(spec);
 
   assertEquals(result.standardTools.length, 1);
-  assertEquals(result.standardTools[0].name, "get::/users");
+  assertEquals(result.standardTools[0].name, "getUsers"); // Use operationId when available
   assertEquals(result.standardTools[0].method, "GET");
   assertEquals(result.standardTools[0].path, "/users");
 });
@@ -179,8 +179,8 @@ Deno.test("translator - multiple operations create unique tools", async () => {
   const result = await openapiToAIToolSchema(spec);
 
   assertEquals(result.standardTools.length, 2);
-  assertEquals(result.standardTools[0].name, "get::/users");
-  assertEquals(result.standardTools[1].name, "post::/users");
+  assertEquals(result.standardTools[0].name, "get_users"); // Clean fallback format when no operationId
+  assertEquals(result.standardTools[1].name, "post_users"); // Clean fallback format when no operationId
 
   for (const tool of result.standardTools) {
     assertExists(tool.inputSchema.properties);
