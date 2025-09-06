@@ -60,17 +60,18 @@ function createBasicToolSchema(
   method: string,
   path: string,
   operation: OAPIOperation,
-  specification: OAPISpecDocument,
+  specification: OAPISpecDocument
 ): ExtendedAIToolSchema {
   // Helper function to format a single response entry
   const formatResponse = ([code, response]: any) => {
-    const schema = response.content?.["application/json"]?.schema ||
+    const schema =
+      response.content?.["application/json"]?.schema ||
       response.content?.["*/*"]?.schema ||
       response.schema;
     const schemaInfo = schema
       ? p(` (schema: {schema})`)({
-        schema: JSON.stringify(schema),
-      })
+          schema: JSON.stringify(schema),
+        })
       : "";
     return `${code}: ${response.description || "No description"}${schemaInfo}`;
   };
@@ -109,16 +110,17 @@ Use this tool to make HTTP requests to the API endpoint. The tool will handle au
 Parameter Usage:
 - pathParams: Required for URLs with placeholders. Provide concrete values.
 - inputParams: Required for query/body/form data. Provide as needed.
-- headerParams: Optional. Mainly for dynamic headers - omit to use global headers automatically.
+- headerParams: Optional. For dynamic headers only. If omitted, global headers will be used automatically.
 
 Values can be strings or executable scripts for dynamic computation.
 Use scripts only when transformation/computation is needed (encoding, timestamps, etc).
-Script format: #!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent("a/b"))`,
+Script format: #!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent("a/b"))`
   )({
     examples: examples ? `\nExamples:\n${examples}` : "",
     method: method.toUpperCase(),
     path,
-    description: operation.description ||
+    description:
+      operation.description ||
       operation.summary ||
       `Execute ${method.toUpperCase()} request to ${path}`,
     tags: operation.tags ? `\nCategories: ${operation.tags.join(", ")}` : "",
@@ -132,22 +134,19 @@ Script format: #!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent("a/b
       properties: {
         pathParams: {
           type: "object",
-          description:
-            `URL path variables. Provide string values or scripts for placeholders in the path. Required when path has variables.`,
+          description: `URL path variables. Provide string values or scripts for placeholders in the path. Required when path has variables.`,
           properties: {},
           required: [],
         },
         inputParams: {
           type: "object",
-          description:
-            `Request data for the API call. Provide string values or scripts for query parameters, body fields, or form data.`,
+          description: `Request data for the API call. Provide string values or scripts for query parameters, body fields, or form data.`,
           properties: {},
           required: [],
         },
         headerParams: {
           type: "object",
-          description:
-            `HTTP headers for dynamic values only. Omit to use global headers automatically.`,
+          description: `HTTP headers for the request. Optional - if omitted, global headers will be used automatically. Only provide specific header values when needed.`,
           properties: {},
           required: [],
         },
@@ -166,7 +165,7 @@ Script format: #!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent("a/b
  */
 function processPathParameters(
   tool: ExtendedAIToolSchema,
-  pathParams: string[],
+  pathParams: string[]
 ): void {
   const pathParamProperties = tool.inputSchema.properties.pathParams.properties;
   const pathParamRequired = tool.inputSchema.properties.pathParams
@@ -204,7 +203,7 @@ function processPathParameters(
  */
 function processOperationParameters(
   tool: ExtendedAIToolSchema,
-  operation: OpenAPI.Operation,
+  operation: OpenAPI.Operation
 ): void {
   if (!operation.parameters) return;
   const sensitiveKV = operation["x-sensitive-params"] ?? {};
@@ -248,7 +247,7 @@ function processInputParameter(
   tool: ExtendedAIToolSchema,
   param: OpenAPI.Parameter,
   paramType: string,
-  paramDescription: string,
+  paramDescription: string
 ): void {
   if (!tool.inputSchema.properties.inputParams.properties) {
     tool.inputSchema.properties.inputParams.properties = {};
@@ -297,7 +296,7 @@ function processHeaderParameter(
   tool: ExtendedAIToolSchema,
   param: OpenAPI.Parameter,
   paramType: string,
-  paramDescription: string,
+  paramDescription: string
 ): void {
   if (!tool.inputSchema.properties.headerParams.properties) {
     tool.inputSchema.properties.headerParams.properties = {};
@@ -330,11 +329,9 @@ function processHeaderParameter(
   // Add to required list if parameter is required
   if (param.required) {
     headerRequired.push(param.name);
-
-    // If headerParams has required fields, make headerParams itself required
-    if (!tool.inputSchema.required.includes("headerParams")) {
-      tool.inputSchema.required.push("headerParams");
-    }
+    
+    // Note: We don't make headerParams itself required to keep it optional
+    // Individual headers within headerParams can still be required
   }
 }
 
@@ -343,7 +340,7 @@ function processHeaderParameter(
  */
 function processRequestBody(
   tool: ExtendedAIToolSchema,
-  operation: OpenAPI.Operation,
+  operation: OpenAPI.Operation
 ): void {
   if (!operation.requestBody) return;
 
@@ -389,7 +386,7 @@ function processRequestBody(
  */
 function processResponseSchemas(
   tool: ExtendedAIToolSchema,
-  operation: OpenAPI.Operation,
+  operation: OpenAPI.Operation
 ): void {
   if (!operation.responses) return;
 
@@ -407,7 +404,8 @@ function processResponseSchemas(
       (typedResponse.content["application/json"]?.schema ||
         typedResponse.content["*/*"]?.schema)
     ) {
-      schema = typedResponse.content["application/json"]?.schema ||
+      schema =
+        typedResponse.content["application/json"]?.schema ||
         typedResponse.content["*/*"]?.schema;
     } else if ("schema" in typedResponse && typedResponse.schema) {
       // OpenAPI v2 style
@@ -421,7 +419,7 @@ function processResponseSchemas(
 }
 
 export async function openapiToAIToolSchema(
-  specification: OAPISpecDocument,
+  specification: OAPISpecDocument
 ): Promise<AIToolSchemaRes> {
   let tools: Array<ExtendedAIToolSchema> = [];
   // Extract paths from the OpenAPI spec
@@ -445,7 +443,7 @@ export async function openapiToAIToolSchema(
           method,
           path,
           operation,
-          specification,
+          specification
         );
 
         // Process response schemas with specification for ref resolution
@@ -505,7 +503,7 @@ export async function openapiToAIToolSchema(
 
 // Helper function to ensure unique tool names
 function ensureUniqueToolNames(
-  tools: ExtendedAIToolSchema[],
+  tools: ExtendedAIToolSchema[]
 ): ExtendedAIToolSchema[] {
   const nameCount: Record<string, number> = {};
 

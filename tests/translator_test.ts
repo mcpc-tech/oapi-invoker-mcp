@@ -275,7 +275,7 @@ Deno.test("translator - inputParams schema supports dynamic scripts", async () =
   assertExists(inputParams);
   assertEquals(
     (inputParams as Record<string, unknown>).description?.toString().includes(
-      "Request parameters",
+      "Request data",
     ),
     true,
   );
