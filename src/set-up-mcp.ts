@@ -10,7 +10,7 @@ export const INCOMING_MSG_ROUTE_PATH = "/oapi/messages";
 const specification = await parseOAPISpecWithExtensions({});
 
 const { standardTools, toolToExtendInfo } = await openapiToAIToolSchema(
-  specification,
+  specification
 );
 
 export function setUpMcpServer(
@@ -27,7 +27,7 @@ export function setUpMcpServer(
         const res = await invoke(
           specification,
           toolToExtendInfo[tool.name],
-          params as InvokerParams,
+          params as InvokerParams
         );
         return {
           content: [
@@ -37,14 +37,17 @@ export function setUpMcpServer(
             },
           ].concat(
             res.debugInfo
-              ? [{
-                type: "text",
-                text: JSON.stringify({ debug: res.debugInfo }),
-              }]
-              : [],
+              ? [
+                  {
+                    type: "text",
+                    text: JSON.stringify({ debug: res.debugInfo }),
+                  },
+                ]
+              : []
           ),
         };
       },
+      { internal: false }
     );
   });
 
