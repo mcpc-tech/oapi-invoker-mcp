@@ -314,14 +314,17 @@ export async function invoke(
   let data: unknown;
   const contentType = response.headers.get("content-type") || "";
 
+  // Read the response body once as text
+  const responseText = await response.text();
+
   if (contentType.includes("application/json")) {
     try {
-      data = await response.json();
+      data = JSON.parse(responseText);
     } catch {
-      data = await response.text();
+      data = responseText;
     }
   } else {
-    data = await response.text();
+    data = responseText;
   }
 
   // Update debug info with response details
