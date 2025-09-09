@@ -77,30 +77,39 @@ function createBasicToolSchema(
 
   const formatToolName = () => {
     const template = specification["x-tool-name-format"];
+    
+    // Create clean path for use in both template and fallback
+    const cleanPath = path
+      .replace(/[{}]/g, "") // Remove braces
+      .replace(/[^a-zA-Z0-9]/g, "_") // Replace special chars with underscore
+      .replace(/_+/g, "_") // Collapse multiple underscores
+      .replace(/^_|_$/g, ""); // Remove leading/trailing underscores
+    
+    let toolName: string;
+    
     if (!template) {
       // Prioritize operationId as it's more semantic and standard
       if (operation.operationId) {
-        return operation.operationId;
+        toolName = operation.operationId;
+      } else {
+        // Fallback: create readable name from method and clean path
+        toolName = `${method}_${cleanPath}`;
       }
-      // Fallback: create readable name from method and path
-      const cleanPath = path
-        .replace(/[{}]/g, "") // Remove braces
-        .replace(/[^a-zA-Z0-9]/g, "_") // Replace special chars with underscore
-        .replace(/_+/g, "_") // Collapse multiple underscores
-        .replace(/^_|_$/g, ""); // Remove leading/trailing underscores
-      return `${method}_${cleanPath}`;
-    }
-    const placeholderValues: Record<string, string> = {
-      method,
-      path,
-      operationId: operation.operationId || "",
-    };
+    } else {
+      const placeholderValues: Record<string, string> = {
+        method,
+        cleanPath,
+        operationId: operation.operationId || "",
+      };
 
-    return p(`{prefix}${template}{suffix}`)({
-      ...placeholderValues,
-      prefix: specification["x-tool-name-prefix"] ?? "",
-      suffix: specification["x-tool-name-suffix"] ?? "",
-    });
+      toolName = p(template)(placeholderValues);
+    }
+
+    // Apply prefix and suffix regardless of whether template is used
+    const prefix = specification["x-tool-name-prefix"] ?? "";
+    const suffix = specification["x-tool-name-suffix"] ?? "";
+    
+    return `${prefix}${toolName}${suffix}`;
   };
 
   const examples = operation["x-examples"]?.join("\n") ?? "";

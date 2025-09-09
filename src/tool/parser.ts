@@ -21,7 +21,7 @@ const ToolOptionsSchema = z.object({
     .string()
     .optional()
     .describe(
-      "Format string for generating tool names, e.g. '{method}-{path}' or '{operationId}'",
+      "Format string for generating tool names, e.g. '{method}-{cleanPath}' or '{operationId}'. Available placeholders: {method}, {cleanPath}, {operationId}",
     ),
   "x-tool-name-prefix": z
     .string()

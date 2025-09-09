@@ -155,6 +155,113 @@ Deno.test("translator - tool name formatting", async () => {
   assertEquals(tool.name, "api_getUsers_v1");
 });
 
+Deno.test("translator - template with cleanPath and prefix/suffix independence", async () => {
+  const spec: OAPISpecDocument = {
+    "x-sensitive-params": {},
+    "x-tool-name-format": "{method}_{cleanPath}",
+    "x-tool-name-prefix": "prefix_",
+    "x-tool-name-suffix": "_suffix",
+    openapi: "3.1.0",
+    info: { title: "Test API", version: "1.0.0" },
+    paths: {
+      "/api/v1/users/{user-id}/posts/{post_id}": {
+        get: {
+          "x-sensitive-params": {},
+          summary: "Get user posts",
+          responses: { "200": { description: "Success" } },
+        },
+      },
+    },
+  };
+
+  const result = await openapiToAIToolSchema(spec);
+  const tool = result.standardTools[0];
+
+  // Template should use cleanPath: /api/v1/users/{user-id}/posts/{post_id} becomes api_v1_users_user_id_posts_post_id
+  // Final result: prefix_ + get_api_v1_users_user_id_posts_post_id + _suffix
+  assertEquals(tool.name, "prefix_get_api_v1_users_user_id_posts_post_id_suffix");
+});
+
+Deno.test("translator - prefix/suffix without template", async () => {
+  const spec: OAPISpecDocument = {
+    "x-sensitive-params": {},
+    // No template, should use fallback logic with prefix/suffix
+    "x-tool-name-prefix": "pre_",
+    "x-tool-name-suffix": "_suf",
+    openapi: "3.1.0",
+    info: { title: "Test API", version: "1.0.0" },
+    paths: {
+      "/api/v2/data": {
+        post: {
+          "x-sensitive-params": {},
+          summary: "Create data",
+          responses: { "201": { description: "Created" } },
+        },
+      },
+    },
+  };
+
+  const result = await openapiToAIToolSchema(spec);
+  const tool = result.standardTools[0];
+
+  // No operationId, so fallback to method_cleanPath with prefix/suffix
+  // /api/v2/data becomes api_v2_data
+  assertEquals(tool.name, "pre_post_api_v2_data_suf");
+});
+
+Deno.test("translator - template with all placeholders", async () => {
+  const spec: OAPISpecDocument = {
+    "x-sensitive-params": {},
+    "x-tool-name-format": "{method}_{cleanPath}_{operationId}",
+    openapi: "3.1.0",
+    info: { title: "Test API", version: "1.0.0" },
+    paths: {
+      "/api/v1/complex-path/{id}": {
+        post: {
+          "x-sensitive-params": {},
+          operationId: "createItem",
+          summary: "Create item",
+          responses: { "200": { description: "Success" } },
+        },
+      },
+    },
+  };
+
+  const result = await openapiToAIToolSchema(spec);
+  const tool = result.standardTools[0];
+
+  // cleanPath: /api/v1/complex-path/{id} becomes api_v1_complex_path_id
+  // Template: {method}_{cleanPath}_{operationId} becomes post_api_v1_complex_path_id_createItem
+  assertEquals(tool.name, "post_api_v1_complex_path_id_createItem");
+});
+
+Deno.test("translator - template only supports safe placeholders", async () => {
+  // Test that path parameter is not available in template (only cleanPath should work)
+  const spec: OAPISpecDocument = {
+    "x-sensitive-params": {},
+    // This template should only have access to method, cleanPath, and operationId
+    // path parameter should not be available to avoid unsafe characters
+    "x-tool-name-format": "{method}_{cleanPath}",
+    openapi: "3.1.0",
+    info: { title: "Test API", version: "1.0.0" },
+    paths: {
+      "/api/v1/unsafe-chars/{param-with-dash}": {
+        get: {
+          "x-sensitive-params": {},
+          summary: "Get with unsafe path",
+          responses: { "200": { description: "Success" } },
+        },
+      },
+    },
+  };
+
+  const result = await openapiToAIToolSchema(spec);
+  const tool = result.standardTools[0];
+
+  // Should use cleanPath which converts unsafe characters to underscores
+  assertEquals(tool.name, "get_api_v1_unsafe_chars_param_with_dash");
+});
+
 Deno.test("translator - multiple operations create unique tools", async () => {
   const spec: OAPISpecDocument = {
     "x-sensitive-params": {},

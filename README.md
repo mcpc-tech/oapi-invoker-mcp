@@ -29,7 +29,12 @@ extensions that provide fine-grained control over API interactions:
 #### Tool Configuration Extensions
 
 - **`x-tool-name-format`**: Customize tool naming patterns (e.g.,
-  `{method}-{path}`, `{operationId}`)
+  `{method}-{cleanPath}`, `{operationId}`)
+  - Available placeholders:
+    - `{method}`: HTTP method (get, post, put, delete, etc.)
+    - `{cleanPath}`: Sanitized path with special characters converted to underscores
+    - `{operationId}`: OpenAPI operation ID (if available)
+  - Note: Raw `{path}` is not supported to avoid unsafe characters in tool names
 - **`x-tool-name-prefix/suffix`**: Add prefixes or suffixes to tool names
 - **`x-filter-rules`**: Filter operations by path patterns, methods, operation
   IDs, or tags
