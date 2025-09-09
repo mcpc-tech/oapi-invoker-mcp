@@ -315,7 +315,11 @@ export async function invoke(
   const contentType = response.headers.get("content-type") || "";
 
   if (contentType.includes("application/json")) {
-    data = await response.json();
+    try {
+      data = await response.json();
+    } catch {
+      data = await response.text();
+    }
   } else {
     data = await response.text();
   }
