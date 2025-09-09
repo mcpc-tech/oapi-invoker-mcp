@@ -82,21 +82,21 @@ Deno.test("invoke - POST with query and body parameters", async () => {
 
   // Verify response
   assertEquals(response.status, 200);
-  
+
   // Parse the response data (httpbin.org echoes request details)
   const data = response.data as {
     url: string;
     json: { name: string; age: number };
     headers: { "Content-Type": string };
   };
-  
+
   // Verify query parameters were added to URL
   assertStringIncludes(data.url, "filter=active");
-  
+
   // Verify body parameters were sent in request body
   assertEquals(data.json.name, "John Doe");
   assertEquals(data.json.age, 30);
-  
+
   // Verify Content-Type header was set
   assertEquals(data.headers["Content-Type"], "application/json");
 });
@@ -148,17 +148,17 @@ Deno.test("invoke - POST with only query parameters", async () => {
   });
 
   assertEquals(response.status, 200);
-  
+
   const data = response.data as {
     url: string;
     args: Record<string, unknown>;
     data: string;
   };
-  
+
   // All parameters should be in query string
   assertStringIncludes(data.url, "search=test");
   assertStringIncludes(data.url, "limit=10");
-  
+
   // No request body should be sent
   assertEquals(data.data, "");
 });
@@ -220,20 +220,20 @@ Deno.test("invoke - POST with only body parameters", async () => {
   });
 
   assertEquals(response.status, 200);
-  
+
   const data = response.data as {
     args: Record<string, unknown>;
     json: { title: string; content: string };
     headers: { "Content-Type": string };
   };
-  
+
   // No query parameters in URL
   assertEquals(data.args, {});
-  
+
   // All parameters should be in request body
   assertEquals(data.json.title, "Test Post");
   assertEquals(data.json.content, "This is test content");
-  
+
   // Verify Content-Type header was set
   assertEquals(data.headers["Content-Type"], "application/json");
 });

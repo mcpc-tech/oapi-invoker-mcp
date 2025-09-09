@@ -179,7 +179,10 @@ Deno.test("translator - template with cleanPath and prefix/suffix independence",
 
   // Template should use cleanPath: /api/v1/users/{user-id}/posts/{post_id} becomes api_v1_users_user_id_posts_post_id
   // Final result: prefix_ + get_api_v1_users_user_id_posts_post_id + _suffix
-  assertEquals(tool.name, "prefix_get_api_v1_users_user_id_posts_post_id_suffix");
+  assertEquals(
+    tool.name,
+    "prefix_get_api_v1_users_user_id_posts_post_id_suffix",
+  );
 });
 
 Deno.test("translator - prefix/suffix without template", async () => {

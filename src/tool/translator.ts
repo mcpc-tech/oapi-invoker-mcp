@@ -77,16 +77,16 @@ function createBasicToolSchema(
 
   const formatToolName = () => {
     const template = specification["x-tool-name-format"];
-    
+
     // Create clean path for use in both template and fallback
     const cleanPath = path
       .replace(/[{}]/g, "") // Remove braces
       .replace(/[^a-zA-Z0-9]/g, "_") // Replace special chars with underscore
       .replace(/_+/g, "_") // Collapse multiple underscores
       .replace(/^_|_$/g, ""); // Remove leading/trailing underscores
-    
+
     let toolName: string;
-    
+
     if (!template) {
       // Prioritize operationId as it's more semantic and standard
       if (operation.operationId) {
@@ -108,7 +108,7 @@ function createBasicToolSchema(
     // Apply prefix and suffix regardless of whether template is used
     const prefix = specification["x-tool-name-prefix"] ?? "";
     const suffix = specification["x-tool-name-suffix"] ?? "";
-    
+
     return `${prefix}${toolName}${suffix}`;
   };
 

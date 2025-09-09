@@ -32,7 +32,8 @@ extensions that provide fine-grained control over API interactions:
   `{method}-{cleanPath}`, `{operationId}`)
   - Available placeholders:
     - `{method}`: HTTP method (get, post, put, delete, etc.)
-    - `{cleanPath}`: Sanitized path with special characters converted to underscores
+    - `{cleanPath}`: Sanitized path with special characters converted to
+      underscores
     - `{operationId}`: OpenAPI operation ID (if available)
   - Note: Raw `{path}` is not supported to avoid unsafe characters in tool names
 - **`x-tool-name-prefix/suffix`**: Add prefixes or suffixes to tool names

@@ -106,7 +106,6 @@ export async function processStringValue(
   value: string,
   env: Record<string, string> = {},
 ): Promise<string> {
-  console.log("Processing string value:", value, env);
   // Check if the value is a script (starts with shebang #!)
   if (isScript(value)) {
     return await executeScript(value, env);
