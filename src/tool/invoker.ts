@@ -182,9 +182,32 @@ export async function invoke(
     url.pathname = url.pathname.replace(/\/$/, "") + path;
   }
 
-  // Add query parameters for GET requests
-  if (method === "get" && Object.keys(inputParams).length > 0) {
-    for (const [key, value] of Object.entries(inputParams)) {
+  // Separate query parameters from body parameters for all requests
+  const queryParams: Record<string, unknown> = {};
+  const bodyParams: Record<string, unknown> = {};
+
+  // Extract query parameter names from raw operation
+  const queryParamNames = new Set<string>();
+  if (_op.parameters) {
+    for (const param of _op.parameters as Array<{ in: string; name: string }>) {
+      if (param.in === "query") {
+        queryParamNames.add(param.name);
+      }
+    }
+  }
+
+  // Separate inputParams into query and body parameters
+  for (const [key, value] of Object.entries(inputParams)) {
+    if (queryParamNames.has(key)) {
+      queryParams[key] = value;
+    } else {
+      bodyParams[key] = value;
+    }
+  }
+
+  // Add query parameters to URL for all requests
+  if (Object.keys(queryParams).length > 0) {
+    for (const [key, value] of Object.entries(queryParams)) {
       if (typeof value === "object") {
         url.searchParams.append(key, JSON.stringify(value));
       } else {
@@ -193,9 +216,9 @@ export async function invoke(
     }
   }
 
-  // Add body for non-GET requests
-  if (method !== "get" && Object.keys(inputParams).length > 0) {
-    requestBody = JSON.stringify(inputParams);
+  // Add body for non-GET requests (only if there are body parameters)
+  if (method !== "get" && Object.keys(bodyParams).length > 0) {
+    requestBody = JSON.stringify(bodyParams);
     requestHeaders["content-type"] = "application/json";
   }
 
