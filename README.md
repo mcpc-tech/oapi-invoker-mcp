@@ -61,8 +61,18 @@ extensions that provide fine-grained control over API interactions:
 
 - **`x-response-config`**: Control response handling:
   - Maximum response length limits
-  - Include/exclude specific response keys
-  - Mark sensitive response fields
+  - `includeResponseKeys`: Specify which keys to include in the response (all others will be excluded)
+    - Supports dot notation for nested fields (e.g., `user.profile.email`)
+    - Supports wildcards: `*` for single level, `**` for all nested levels (e.g., `data.*.id`, `user.**`)
+    - Single words without dots will match all properties with that name at any level
+  - `excludeResponseKeys`: Specify which keys to exclude from the response
+    - Supports dot notation for nested fields (e.g., `user.profile.address`)
+    - Supports wildcards: `*` for single level, `**` for all nested levels (e.g., `data.*.secret`, `credentials.**`)
+    - Single words without dots will match all properties with that name at any level (e.g., `secret` will exclude all properties named "secret" at any depth)
+  - `sensitiveResponseFields`: Mark specific fields as sensitive (will be replaced with "\*SENSITIVE\*")
+    - Supports dot notation for nested fields (e.g., `user.token`)
+    - Supports wildcards: `*` for single level, `**` for all nested levels (e.g., `*.password`, `**.secret`)
+    - Single words without dots will match all properties with that name at any level (e.g., `password` will mask all properties named "password" at any depth)
 - **`x-tree-shaking-func`**: Custom response data filtering
 
 ### 📜 Script-Based Dynamic Values
@@ -541,7 +551,7 @@ x-filter-rules:
 
 x-response-config:
   maxLength: 50000
-  excludeResponseKeys: ["debug", "trace"]
+  excludeResponseKeys: ["data.**.update_time", "trace"]
 ```
 
 ## Environment Variables Reference
