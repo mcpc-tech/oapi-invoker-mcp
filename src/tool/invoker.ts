@@ -358,6 +358,138 @@ export async function invoke(
 }
 
 /**
+ * Expands wildcard paths in the given keys array.
+ * Supports:
+ * - "*" wildcard for matching all properties at the current level
+ * - "**" wildcard for matching all properties at all nested levels
+ * 
+ * @param item The object to process
+ * @param keys Array of path strings that may contain wildcards
+ * @returns Array of expanded path strings with wildcards resolved to actual paths
+ */
+function expandWildcardPaths(item: any, keys: string[]): string[] {
+  if (!isObject(item) || isNull(item) || keys.length === 0) {
+    return keys;
+  }
+
+  const expandedPaths: string[] = [];
+
+  for (const key of keys) {
+    if (!key.includes("*")) {
+      // No wildcards, add as is
+      expandedPaths.push(key);
+      continue;
+    }
+
+    const segments = key.split(".");
+    expandPathRecursive(item, segments, 0, "", expandedPaths);
+  }
+
+  return expandedPaths;
+}
+
+/**
+ * Recursively expands a path with wildcards
+ */
+function expandPathRecursive(
+  obj: any, 
+  segments: string[], 
+  index: number, 
+  currentPath: string, 
+  result: string[]
+): void {
+  if (index >= segments.length) {
+    if (currentPath.length > 0) {
+      result.push(currentPath.substring(1)); // Remove leading dot
+    }
+    return;
+  }
+
+  const segment = segments[index];
+
+  // Handle "**" (all nested levels)
+  if (segment === "**") {
+    // Include current path (if we're not at the start)
+    if (index > 0 && index < segments.length - 1) {
+      expandPathRecursive(obj, segments, index + 1, currentPath, result);
+    }
+
+    // Recursively process all properties at this level and deeper
+    if (isObject(obj) && !isNull(obj)) {
+      for (const key in obj) {
+        // Use get to safely access properties
+        const value = get(obj, key);
+        const newPath = `${currentPath}.${key}`;
+
+        // Continue with ** at the same position for nested objects
+        if (isObject(value) && !isNull(value)) {
+          expandPathRecursive(value, segments, index, newPath, result);
+        }
+
+        // Also try to continue with the next segment
+        expandPathRecursive(value, segments, index + 1, newPath, result);
+      }
+    }
+    return;
+  }
+
+  // Handle "*" (current level only)
+  if (segment === "*") {
+    if (isObject(obj) && !isNull(obj)) {
+      for (const key in obj) {
+        const newPath = `${currentPath}.${key}`;
+        // Use get to safely access properties
+        expandPathRecursive(get(obj, key), segments, index + 1, newPath, result);
+      }
+    }
+    return;
+  }
+
+  // Regular property
+  if (isObject(obj) && !isNull(obj) && has(obj, segment)) {
+    const newPath = `${currentPath}.${segment}`;
+    expandPathRecursive(get(obj, segment), segments, index + 1, newPath, result);
+  }
+}
+
+/**
+ * Recursively finds all paths in an object where the property name matches the given key
+ * @param obj The object to search
+ * @param key The property name to match
+ * @param currentPath Current path being built (used in recursion)
+ * @param result Array to collect matching paths
+ */
+function findMatchingPropertyPaths(
+  obj: any,
+  key: string,
+  currentPath: string = "",
+  result: string[] = []
+): string[] {
+  if (!isObject(obj) || isNull(obj)) {
+    return result;
+  }
+
+  // Check all properties at current level
+  for (const prop in obj) {
+    const newPath = currentPath ? `${currentPath}.${prop}` : prop;
+
+    // If property name matches the key, add it to results
+    if (prop === key) {
+      result.push(newPath);
+    }
+
+    // Recursively check nested objects
+    // Use get to safely access properties and avoid TypeScript index signature errors
+    const value = get(obj, prop);
+    if (isObject(value) && !isNull(value)) {
+      findMatchingPropertyPaths(value, key, newPath, result);
+    }
+  }
+
+  return result;
+}
+
+/**
  * Transforms a single data item (object) by applying inclusion, exclusion, and sensitive field masking rules.
  */
 function transformItem(
@@ -371,6 +503,34 @@ function transformItem(
     return item;
   }
 
+  // Process keys that don't contain dots for recursive property name matching
+  const processedExcludeKeys = excludeKeys.flatMap(key => {
+    // If key doesn't contain dots, find all paths with matching property name
+    if (!key.includes('.') && !key.includes('*')) {
+      return findMatchingPropertyPaths(item, key);
+    }
+    return key;
+  });
+
+  const processedIncludeKeys = includeKeys.flatMap(key => {
+    if (!key.includes('.') && !key.includes('*')) {
+      return findMatchingPropertyPaths(item, key);
+    }
+    return key;
+  });
+
+  const processedSensitiveKeys = sensitiveKeys.flatMap(key => {
+    if (!key.includes('.') && !key.includes('*')) {
+      return findMatchingPropertyPaths(item, key);
+    }
+    return key;
+  });
+
+  // Expand wildcard paths in all key arrays
+  const expandedIncludeKeys = expandWildcardPaths(item, processedIncludeKeys);
+  const expandedExcludeKeys = expandWildcardPaths(item, processedExcludeKeys);
+  const expandedSensitiveKeys = expandWildcardPaths(item, processedSensitiveKeys);
+
   /**
    * Step 1: Creates the initial processed item.
    * If `includeKeys` are provided, a new object is constructed containing only those keys.
@@ -379,10 +539,10 @@ function transformItem(
    * @returns {any} The initial state of the processed item.
    */
   const createInitialItem = (originalItem: any): any => {
-    if (includeKeys.length > 0) {
+    if (expandedIncludeKeys.length > 0) {
       // _.reduce to build the new object. _.set mutates the accumulator (acc).
       return reduce(
-        includeKeys,
+        expandedIncludeKeys,
         (acc: any, pathString: string) => {
           const value = get(originalItem, pathString); // Use _.get
           if (value !== undefined) {
@@ -405,42 +565,18 @@ function transformItem(
    */
   const applyExclusions = (currentProcessedItem: any): any => {
     if (
-      excludeKeys.length === 0 ||
+      expandedExcludeKeys.length === 0 ||
       !isObject(currentProcessedItem) ||
       isNull(currentProcessedItem)
     ) {
       return currentProcessedItem;
     }
 
-    for (const pathString of excludeKeys) {
-      const pathSegments = pathString.split(".");
-      if (pathSegments.length === 0) {
-        continue; // Skip invalid empty path
-      }
-
-      // Lodash's _.unset can simplify this, but to keep the exact same logic as before:
-      let current: any = currentProcessedItem;
-      // Navigate to the parent of the target property
-      for (let i = 0; i < pathSegments.length - 1; i++) {
-        const segment = pathSegments[i];
-        // Check if current is an object and has the segment
-        if (isObject(current) && has(current, segment)) {
-          current = get(current, segment);
-        } else {
-          current = null; // Path does not exist or is not an object
-          break;
-        }
-      }
-
-      // If path is valid and parent is an object, delete the target property
-      if (isObject(current)) {
-        const lastSegment = pathSegments[pathSegments.length - 1];
-        // _.unset(current, lastSegment) could also be used here if current was the root object for that path
-        if (has(current, lastSegment)) {
-          unset(current, lastSegment);
-        }
-      }
+    // Use lodash's unset for cleaner path handling
+    for (const pathString of expandedExcludeKeys) {
+      unset(currentProcessedItem, pathString);
     }
+
     return currentProcessedItem;
   };
 
@@ -452,7 +588,7 @@ function transformItem(
    */
   const applySensitization = (currentProcessedItem: any): any => {
     if (
-      sensitiveKeys.length === 0 ||
+      expandedSensitiveKeys.length === 0 ||
       !isObject(currentProcessedItem) ||
       isNull(currentProcessedItem)
     ) {
@@ -462,12 +598,11 @@ function transformItem(
     // We iterate and apply _.set for each sensitive key.
     // Using _.reduce here to chain mutations on the same object.
     return reduce(
-      sensitiveKeys,
+      expandedSensitiveKeys,
       (acc: any, pathString: string) => {
-        const pathArray = pathString.split(".");
-        if (has(acc, pathArray)) {
+        if (has(acc, pathString)) {
           // Check if path exists using _.has
-          set(acc, pathArray, SENSITIVE_MARK); // _.set mutates acc
+          set(acc, pathString, SENSITIVE_MARK); // _.set mutates acc
         }
         return acc;
       },
@@ -496,10 +631,12 @@ export function postProcess(
       return data;
     }
 
-    const includeResponseKeys: string[] = op["x-include-response-keys"] ||
+    const includeResponseKeys: string[] = 
+      op["x-include-response-keys"] ||
       responseConfigGlobal["includeResponseKeys"] ||
       [];
-    const excludeResponseKeys: string[] = op["x-exclude-response-keys"] ||
+    const excludeResponseKeys: string[] = 
+      op["x-exclude-response-keys"] ||
       responseConfigGlobal["excludeResponseKeys"] ||
       [];
     const sensitiveResponseFields: string[] =
@@ -520,7 +657,7 @@ export function postProcess(
     const itemsToProcess = wasArray ? (data as any[]) : [data];
 
     // Use _.map for transformation
-    const processedItems = map(itemsToProcess, (currentItem: any) => {
+    const processedItems = map(itemsToProcess, (currentItem: unknown) => {
       return transformItem(
         currentItem,
         includeResponseKeys,
@@ -547,8 +684,7 @@ function truncateData(data: unknown, maxLength?: number): unknown {
   }
 
   return {
-    message:
-      `Response was truncated (length: ${stringified.length}, max: ${maxLength})`,
+    message: `Response was truncated (length: ${stringified.length}, max: ${maxLength})`,
     truncatedData: stringified.slice(0, maxLength) + "...",
   };
 }
