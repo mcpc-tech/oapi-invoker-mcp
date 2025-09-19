@@ -1,5 +1,5 @@
 import { assertEquals } from "jsr:@std/assert";
-import { postProcess } from "../src/tool/invoker.ts";
+import { postProcess, SENSITIVE_MARK } from "../src/tool/invoker.ts";
 
 // Mock the necessary objects for testing
 const mockSpec = {} as any;
@@ -70,7 +70,6 @@ Deno.test("Single-level wildcard (*) - include keys", () => {
 });
 
 Deno.test("Single-level wildcard (*) - sensitive fields", () => {
-  const SENSITIVE_MARK = "*SENSITIVE*";
   const mockTool = createMockTool([], [], ["data.items.*.secret"]);
   const result = postProcess(mockSpec, mockTool as any, testData);
   
@@ -84,7 +83,6 @@ Deno.test("Single-level wildcard (*) - sensitive fields", () => {
 });
 
 Deno.test("Non wildcard - sensitive fields", () => {
-  const SENSITIVE_MARK = "*SENSITIVE*";
   const mockTool = createMockTool([], [], ["secret"]);
   const result = postProcess(mockSpec, mockTool as any, testData);
   
@@ -98,7 +96,6 @@ Deno.test("Non wildcard - sensitive fields", () => {
 });
 
 Deno.test("Multi-level wildcard (**) - sensitive fields", () => {
-  const SENSITIVE_MARK = "*SENSITIVE*";
   const mockTool = createMockTool([], [], ["**.secret"]);
   const result = postProcess(mockSpec, mockTool as any, testData);
   
@@ -112,17 +109,16 @@ Deno.test("Multi-level wildcard (**) - sensitive fields", () => {
 });
 
 Deno.test("Multi-level wildcard (**) - sensitive fields", () => {
-  const SENSITIVE_MARK = "*SENSITIVE*";
-  // 不使用 includeKeys，这样可以测试在不指定包含键的情况下敏感字段掩码是否正常工作
+  // Not using includeKeys to test if sensitive field masking works without specifying included keys
   const mockTool = createMockTool([], [], ["data.**.secret"]);
   const result = postProcess(mockSpec, mockTool as any, testData);
   
-  // 检查所有层级的 secret 字段是否都被掩码
+  // Check if all secret fields at all levels are masked
   assertEquals((result as any).data.items[0].secret, SENSITIVE_MARK);
   assertEquals((result as any).data.items[1].secret, SENSITIVE_MARK);
   assertEquals((result as any).data.nested.level1.level2.secret, SENSITIVE_MARK);
   
-  // 检查其他字段是否保持不变
+  // Check if other fields remain unchanged
   assertEquals((result as any).data.items[0].id, 1);
   assertEquals((result as any).data.items[0].name, "Item 1");
   assertEquals((result as any).data.nested.level1.level2.id, 100);
@@ -173,9 +169,12 @@ Deno.test("Multi-level wildcard (**) - timestamp fields", () => {
 
 Deno.test("Combined wildcards - complex case", () => {
   const mockTool = createMockTool(
-    ["data.items.*.id", "data.**.timestamp", "data.nested.level1.level2.secret"], // 添加敏感字段路径到 includeKeys
+    [
+      "data.items.*.id", "data.**.timestamp", 
+      "data.nested.level1.level2.secret"
+    ],
     ["data.items.*.metadata.updated"], 
-    ["data.nested.level1.level2.secret"] // 使用具体路径而不是通配符
+    ["data.nested.level1.level2.secret"]
   );
   const result = postProcess(mockSpec, mockTool as any, testData);
   
