@@ -19,16 +19,23 @@ import {
 import type { OAPISpecDocument } from "./parser.ts";
 import type { ExtendedAIToolSchema } from "./translator.ts";
 import { p } from "@mcpc/core";
-import { processRequestValues } from "./value-processor.ts";
+import { processRequestValues, processValue } from "./value-processor.ts";
 import process from "node:process";
 
 export const SENSITIVE_MARK = "*SENSITIVE*";
+
+export interface InvokerParams {
+  pathParams?: Record<string, unknown>;
+  inputParams?: Record<string, unknown>;
+  headerParams?: Record<string, unknown>;
+}
 
 interface InvokerResponse {
   status: number;
   statusText: string;
   headers: Record<string, string>;
   data: unknown;
+  debugInfo: DebugInfo | null;
   raw: Response;
 }
 
@@ -70,21 +77,25 @@ interface DebugInfo {
 export async function invoke(
   spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
-  params: {
-    pathParams?: Record<string, unknown>;
-    inputParams?: Record<string, unknown>;
-  }
+  params: InvokerParams,
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
   const isDebugMode = process.env["OAPI_INVOKER_DEBUG"] === "1";
 
-  let { pathParams = {}, inputParams = {} } = params;
+  let { pathParams = {}, inputParams = {}, headerParams = {} } = params;
 
   const baseUrl = requestConfigGlobal.baseUrl || spec.servers?.[0]?.url;
   const { headers = {}, timeout = 30000, retries = 0 } = requestConfigGlobal;
 
   const method = extendTool.method?.toLowerCase() || "get";
-  const path = p(extendTool.path!)({ ...pathParams });
+
+  // Process pathParams scripts before path construction
+  const processedPathParams = await processValue(pathParams) as Record<
+    string,
+    unknown
+  >;
+
+  const path = p(extendTool.path!)(processedPathParams);
   const _op = (extendTool._rawOperation || {}) as Record<string, unknown>;
   const specificUrl = _op["x-custom-base-url"] as string | undefined;
   const sensitiveParams =
@@ -115,7 +126,7 @@ export async function invoke(
         headers: {},
       },
       processing: {
-        pathParams: cloneDeep(pathParams),
+        pathParams: cloneDeep(processedPathParams),
         inputParams: cloneDeep(inputParams),
         sensitiveParams: cloneDeep(sensitiveParams),
         usedProxy: false,
@@ -132,15 +143,24 @@ export async function invoke(
   let requestHeaders = { ...headers };
   let requestBody: string | null = null;
 
-  // Process all values including headers, pathParams, and inputParams
+  // Process remaining values (headers, inputParams, headerParams)
   const processed = await processRequestValues(
     requestHeaders,
-    pathParams,
-    inputParams
+    {}, // pathParams already processed above
+    inputParams,
+    headerParams,
   );
   requestHeaders = processed.headers;
-  pathParams = processed.pathParams;
+  pathParams = processedPathParams; // Use the already processed pathParams
   inputParams = processed.inputParams;
+  const processedHeaders = processed.headerParams || {};
+
+  // Add processed header parameters to requestHeaders
+  for (const [name, value] of Object.entries(processedHeaders)) {
+    if (value !== undefined) {
+      requestHeaders[name] = String(value);
+    }
+  }
 
   let url = new URL(specificUrl ?? baseUrl);
 
@@ -162,9 +182,32 @@ export async function invoke(
     url.pathname = url.pathname.replace(/\/$/, "") + path;
   }
 
-  // Add query parameters for GET requests
-  if (method === "get" && Object.keys(inputParams).length > 0) {
-    for (const [key, value] of Object.entries(inputParams)) {
+  // Separate query parameters from body parameters for all requests
+  const queryParams: Record<string, unknown> = {};
+  const bodyParams: Record<string, unknown> = {};
+
+  // Extract query parameter names from raw operation
+  const queryParamNames = new Set<string>();
+  if (_op.parameters) {
+    for (const param of _op.parameters as Array<{ in: string; name: string }>) {
+      if (param.in === "query") {
+        queryParamNames.add(param.name);
+      }
+    }
+  }
+
+  // Separate inputParams into query and body parameters
+  for (const [key, value] of Object.entries(inputParams)) {
+    if (queryParamNames.has(key)) {
+      queryParams[key] = value;
+    } else {
+      bodyParams[key] = value;
+    }
+  }
+
+  // Add query parameters to URL for all requests
+  if (Object.keys(queryParams).length > 0) {
+    for (const [key, value] of Object.entries(queryParams)) {
       if (typeof value === "object") {
         url.searchParams.append(key, JSON.stringify(value));
       } else {
@@ -173,9 +216,9 @@ export async function invoke(
     }
   }
 
-  // Add body for non-GET requests
-  if (method !== "get" && Object.keys(inputParams).length > 0) {
-    requestBody = JSON.stringify(inputParams);
+  // Add body for non-GET requests (only if there are body parameters)
+  if (method !== "get" && Object.keys(bodyParams).length > 0) {
+    requestBody = JSON.stringify(bodyParams);
     requestHeaders["content-type"] = "application/json";
   }
 
@@ -207,7 +250,7 @@ export async function invoke(
       url.searchParams,
       requestHeaders,
       requestBody,
-      authConfig
+      authConfig,
     );
   }
 
@@ -249,14 +292,14 @@ export async function invoke(
     } catch (err) {
       error = err as Error;
       console.error(
-        `Attempt ${attempt + 1} failed for tool ${extendTool.name}: ${
-          error.message
-        }`,
-        error
+        `Attempt ${
+          attempt + 1
+        } failed for tool ${extendTool.name}: ${error.message}`,
+        error,
       );
       if (attempt === retries) {
         throw new Error(
-          `Failed to invoke tool ${extendTool.name}: ${error.message}`
+          `Failed to invoke tool ${extendTool.name}: ${error.message}`,
         );
       }
       // Wait before retrying (exponential backoff)
@@ -268,14 +311,20 @@ export async function invoke(
     throw new Error(`Failed to invoke tool ${extendTool.name}: No response`);
   }
 
-  // Parse response
   let data: unknown;
   const contentType = response.headers.get("content-type") || "";
 
+  // Read the response body once as text
+  const responseText = await response.text();
+
   if (contentType.includes("application/json")) {
-    data = await response.json();
+    try {
+      data = JSON.parse(responseText);
+    } catch {
+      data = responseText;
+    }
   } else {
-    data = await response.text();
+    data = responseText;
   }
 
   // Update debug info with response details
@@ -291,19 +340,6 @@ export async function invoke(
   // Post process response
   data = postProcess(spec, extendTool, data);
 
-  // Append debug info to data if debug mode is enabled
-  if (isDebugMode && debugInfo) {
-    if (isObject(data) && !isNull(data)) {
-      (data as Record<string, unknown>)["_debug"] = debugInfo;
-    } else {
-      data = {
-        originalData: data,
-        _debug: debugInfo,
-      };
-    }
-  }
-
-  // Create response object
   const headerObj: Record<string, string> = {};
   response.headers.forEach((value, key) => {
     headerObj[key] = value;
@@ -314,15 +350,12 @@ export async function invoke(
     statusText: response.statusText,
     headers: headerObj,
     data,
+    debugInfo,
     raw: response,
   };
 
   return invokerResponse;
 }
-
-/**
- * Transforms a single data item (object) by applying inclusion, exclusion, and sensitive field masking rules.
- */
 
 /**
  * Expands wildcard paths in the given keys array.
@@ -387,12 +420,12 @@ function expandPathRecursive(
         // Use get to safely access properties
         const value = get(obj, key);
         const newPath = `${currentPath}.${key}`;
-        
+
         // Continue with ** at the same position for nested objects
         if (isObject(value) && !isNull(value)) {
           expandPathRecursive(value, segments, index, newPath, result);
         }
-        
+
         // Also try to continue with the next segment
         expandPathRecursive(value, segments, index + 1, newPath, result);
       }
@@ -439,12 +472,12 @@ function findMatchingPropertyPaths(
   // Check all properties at current level
   for (const prop in obj) {
     const newPath = currentPath ? `${currentPath}.${prop}` : prop;
-    
+
     // If property name matches the key, add it to results
     if (prop === key) {
       result.push(newPath);
     }
-    
+
     // Recursively check nested objects
     // Use get to safely access properties and avoid TypeScript index signature errors
     const value = get(obj, prop);
@@ -452,15 +485,18 @@ function findMatchingPropertyPaths(
       findMatchingPropertyPaths(value, key, newPath, result);
     }
   }
-  
+
   return result;
 }
 
+/**
+ * Transforms a single data item (object) by applying inclusion, exclusion, and sensitive field masking rules.
+ */
 function transformItem(
   item: any,
   includeKeys: string[],
   excludeKeys: string[],
-  sensitiveKeys: string[]
+  sensitiveKeys: string[],
 ): any {
   // If item is not an object or is null, transformations do not apply.
   if (!isObject(item) || isNull(item)) {
@@ -514,7 +550,7 @@ function transformItem(
           }
           return acc;
         },
-        {} // Initial accumulator is an empty object
+        {}, // Initial accumulator is an empty object
       );
     }
     return cloneDeep(originalItem); // Use _.cloneDeep
@@ -540,7 +576,7 @@ function transformItem(
     for (const pathString of expandedExcludeKeys) {
       unset(currentProcessedItem, pathString);
     }
-    
+
     return currentProcessedItem;
   };
 
@@ -570,7 +606,7 @@ function transformItem(
         }
         return acc;
       },
-      currentProcessedItem // Start with the currentProcessedItem
+      currentProcessedItem, // Start with the currentProcessedItem
     );
   };
 
@@ -586,7 +622,7 @@ function transformItem(
 export function postProcess(
   _spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
-  data: unknown
+  data: unknown,
 ): unknown {
   const responseConfigGlobal = _spec["x-response-config"] || {};
   const op = extendTool._rawOperation;
@@ -595,11 +631,11 @@ export function postProcess(
       return data;
     }
 
-    const includeResponseKeys: string[] =
+    const includeResponseKeys: string[] = 
       op["x-include-response-keys"] ||
       responseConfigGlobal["includeResponseKeys"] ||
       [];
-    const excludeResponseKeys: string[] =
+    const excludeResponseKeys: string[] = 
       op["x-exclude-response-keys"] ||
       responseConfigGlobal["excludeResponseKeys"] ||
       [];
@@ -621,12 +657,12 @@ export function postProcess(
     const itemsToProcess = wasArray ? (data as any[]) : [data];
 
     // Use _.map for transformation
-    const processedItems = map(itemsToProcess, (currentItem: any) => {
+    const processedItems = map(itemsToProcess, (currentItem: unknown) => {
       return transformItem(
         currentItem,
         includeResponseKeys,
         excludeResponseKeys,
-        sensitiveResponseFields
+        sensitiveResponseFields,
       );
     });
 
