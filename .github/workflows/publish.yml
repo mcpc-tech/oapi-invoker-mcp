@@ -24,7 +24,7 @@ jobs:
           deno-version: v2.x
 
       - name: Verify types
-        run: deno check cli.ts
+        run: deno check
 
       - name: Publish to JSR
         run: deno publish
