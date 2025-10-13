@@ -1,0 +1,11 @@
+{
+  "packages": [
+    {
+      "name": "@mcpc/oapi-invoker-mcp",
+      "version": "latest",
+      "packageJson": {
+        "name": "@mcpc-tech/oapi-invoker-mcp"
+      }
+    }
+  ]
+}

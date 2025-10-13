@@ -1,0 +1,80 @@
+name: Publish to JSR and NPM
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  publish-jsr:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Verify types
+        run: deno check cli.ts
+
+      - name: Publish to JSR
+        run: deno publish
+
+  publish-npm:
+    runs-on: ubuntu-latest
+    needs: publish-jsr
+
+    permissions:
+      contents: write
+      id-token: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Deno
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v2.x
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Run JSR to NPM conversion
+        run: deno run -A cli.ts
+
+      - name: Publish to npm
+        run: |
+          for dir in __*_*/dist; do
+            cd "$dir"
+            NAME=$(node -p "require('./package.json').name")
+            VERSION=$(node -p "require('./package.json').version")
+
+            if npm view "$NAME@$VERSION" version 2>/dev/null; then
+              echo "Skipping $NAME@$VERSION (already published)"
+            else
+              npm publish --access public --provenance
+            fi
+            cd ../..
+          done
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: npm-package
+          path: __*_*/dist/
+          retention-days: 7
