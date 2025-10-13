@@ -1,8 +1,12 @@
 {
   "name": "@mcpc/oapi-invoker-mcp",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "Invokes any OpenAPI through Model Context Protocol (MCP) server, supporting specification patches, custom authentication protocols, and data encryption/decryption",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mcpc-tech/oapi-invoker-mcp.git"
+  },
   "tasks": {
     "server:watch": "deno -A --watch ./src/server.ts",
     "server:compile": "deno install -f --global --import-map=../../import_map.json --allow-scripts=npm:protobufjs@7.5.0 --node-modules-dir -A --root=$DENO_DIR/mcp-servers/ --name=oapi-invoker src/stdio.server.ts"
