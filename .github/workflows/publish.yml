@@ -53,7 +53,7 @@ jobs:
           registry-url: "https://registry.npmjs.org"
 
       - name: Run JSR to NPM conversion
-        run: deno run -A cli.ts
+        run: npx -y @yaonyan/jsr2npm@latest
 
       - name: Publish to npm
         run: |
