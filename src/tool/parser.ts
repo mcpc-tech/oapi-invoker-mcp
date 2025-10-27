@@ -153,6 +153,7 @@ const OperationExtensionSchema = z
     "x-remap-path-to-header": z
       .array(z.string().describe("Header key to remap to"))
       .optional(),
+    "x-custom-path": z.string().optional(),
     "x-custom-base-url": z.string().optional(),
     "x-sensitive-params": z
       .record(z.string(), z.string())

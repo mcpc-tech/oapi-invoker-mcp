@@ -98,6 +98,7 @@ export async function invoke(
   const path = p(extendTool.path!)(processedPathParams);
   const _op = (extendTool._rawOperation || {}) as Record<string, unknown>;
   const specificUrl = _op["x-custom-base-url"] as string | undefined;
+  const customPathTemplate = _op["x-custom-path"] as string | undefined;
   const sensitiveParams =
     (_op["x-sensitive-params"] as Record<string, unknown>) ?? {};
 
@@ -137,7 +138,7 @@ export async function invoke(
   }
 
   if ((!specificUrl && !baseUrl) || !method || !path) {
-    throw new Error("Invalid tool configuration");
+    throw new Error("Invalid tool configuration, no URL/method/path");
   }
 
   let requestHeaders = { ...headers };
@@ -162,9 +163,23 @@ export async function invoke(
     }
   }
 
+  // Determine final path: use x-custom-path (processed) if provided, otherwise use operation path
+  const finalPath = customPathTemplate
+    ? p(customPathTemplate)(processedPathParams)
+    : path;
+
+  // Update debug info tool.path to reflect final path when debug is enabled
+  if (debugInfo) {
+    debugInfo.tool.path = finalPath;
+  }
+
+  if ((!specificUrl && !baseUrl) || !method || !finalPath) {
+    throw new Error("Invalid tool configuration");
+  }
+
   let url = new URL(specificUrl ?? baseUrl);
 
-  const pathItems = path.split("/").slice(1);
+  const pathItems = finalPath.split("/").slice(1);
   const pathRemaps = _op["x-remap-path-to-header"] as string[] | undefined;
   if (pathRemaps) {
     if (debugInfo) {
@@ -179,7 +194,7 @@ export async function invoke(
   } else {
     // Preserve base URL's path and append the tool path to support multi-level base URLs
     // Remove trailing slash from base path if present, then concatenate
-    url.pathname = url.pathname.replace(/\/$/, "") + path;
+    url.pathname = url.pathname.replace(/\/$/, "") + finalPath;
   }
 
   // Separate query parameters from body parameters for all requests
@@ -246,7 +261,7 @@ export async function invoke(
     // @ts-ignore: generateTencentCloudSignature function signature may not match perfectly with Type`Script`
     requestHeaders = generateTencentCloudSignature(
       method,
-      path,
+      finalPath,
       url.searchParams,
       requestHeaders,
       requestBody,
@@ -362,7 +377,7 @@ export async function invoke(
  * Supports:
  * - "*" wildcard for matching all properties at the current level
  * - "**" wildcard for matching all properties at all nested levels
- * 
+ *
  * @param item The object to process
  * @param keys Array of path strings that may contain wildcards
  * @returns Array of expanded path strings with wildcards resolved to actual paths
@@ -392,11 +407,11 @@ function expandWildcardPaths(item: any, keys: string[]): string[] {
  * Recursively expands a path with wildcards
  */
 function expandPathRecursive(
-  obj: any, 
-  segments: string[], 
-  index: number, 
-  currentPath: string, 
-  result: string[]
+  obj: any,
+  segments: string[],
+  index: number,
+  currentPath: string,
+  result: string[],
 ): void {
   if (index >= segments.length) {
     if (currentPath.length > 0) {
@@ -439,7 +454,13 @@ function expandPathRecursive(
       for (const key in obj) {
         const newPath = `${currentPath}.${key}`;
         // Use get to safely access properties
-        expandPathRecursive(get(obj, key), segments, index + 1, newPath, result);
+        expandPathRecursive(
+          get(obj, key),
+          segments,
+          index + 1,
+          newPath,
+          result,
+        );
       }
     }
     return;
@@ -448,7 +469,13 @@ function expandPathRecursive(
   // Regular property
   if (isObject(obj) && !isNull(obj) && has(obj, segment)) {
     const newPath = `${currentPath}.${segment}`;
-    expandPathRecursive(get(obj, segment), segments, index + 1, newPath, result);
+    expandPathRecursive(
+      get(obj, segment),
+      segments,
+      index + 1,
+      newPath,
+      result,
+    );
   }
 }
 
@@ -463,7 +490,7 @@ function findMatchingPropertyPaths(
   obj: any,
   key: string,
   currentPath: string = "",
-  result: string[] = []
+  result: string[] = [],
 ): string[] {
   if (!isObject(obj) || isNull(obj)) {
     return result;
@@ -504,23 +531,23 @@ function transformItem(
   }
 
   // Process keys that don't contain dots for recursive property name matching
-  const processedExcludeKeys = excludeKeys.flatMap(key => {
+  const processedExcludeKeys = excludeKeys.flatMap((key) => {
     // If key doesn't contain dots, find all paths with matching property name
-    if (!key.includes('.') && !key.includes('*')) {
+    if (!key.includes(".") && !key.includes("*")) {
       return findMatchingPropertyPaths(item, key);
     }
     return key;
   });
 
-  const processedIncludeKeys = includeKeys.flatMap(key => {
-    if (!key.includes('.') && !key.includes('*')) {
+  const processedIncludeKeys = includeKeys.flatMap((key) => {
+    if (!key.includes(".") && !key.includes("*")) {
       return findMatchingPropertyPaths(item, key);
     }
     return key;
   });
 
-  const processedSensitiveKeys = sensitiveKeys.flatMap(key => {
-    if (!key.includes('.') && !key.includes('*')) {
+  const processedSensitiveKeys = sensitiveKeys.flatMap((key) => {
+    if (!key.includes(".") && !key.includes("*")) {
       return findMatchingPropertyPaths(item, key);
     }
     return key;
@@ -529,7 +556,10 @@ function transformItem(
   // Expand wildcard paths in all key arrays
   const expandedIncludeKeys = expandWildcardPaths(item, processedIncludeKeys);
   const expandedExcludeKeys = expandWildcardPaths(item, processedExcludeKeys);
-  const expandedSensitiveKeys = expandWildcardPaths(item, processedSensitiveKeys);
+  const expandedSensitiveKeys = expandWildcardPaths(
+    item,
+    processedSensitiveKeys,
+  );
 
   /**
    * Step 1: Creates the initial processed item.
@@ -631,12 +661,10 @@ export function postProcess(
       return data;
     }
 
-    const includeResponseKeys: string[] = 
-      op["x-include-response-keys"] ||
+    const includeResponseKeys: string[] = op["x-include-response-keys"] ||
       responseConfigGlobal["includeResponseKeys"] ||
       [];
-    const excludeResponseKeys: string[] = 
-      op["x-exclude-response-keys"] ||
+    const excludeResponseKeys: string[] = op["x-exclude-response-keys"] ||
       responseConfigGlobal["excludeResponseKeys"] ||
       [];
     const sensitiveResponseFields: string[] =
@@ -684,7 +712,8 @@ function truncateData(data: unknown, maxLength?: number): unknown {
   }
 
   return {
-    message: `Response was truncated (length: ${stringified.length}, max: ${maxLength})`,
+    message:
+      `Response was truncated (length: ${stringified.length}, max: ${maxLength})`,
     truncatedData: stringified.slice(0, maxLength) + "...",
   };
 }

@@ -54,6 +54,7 @@ extensions that provide fine-grained control over API interactions:
 - **`x-examples`**: Add request/response examples for better documentation
 - **`x-remap-path-to-header`**: Map path parameters to request headers
 - **`x-custom-base-url`**: Override base URL per operation
+- **`x-custom-path`**: Override operation path
 - **`x-sensitive-params`**: Mark sensitive data for automatic redaction
 - **`x-sensitive-response-fields`**: Mark response fields as sensitive
 
@@ -61,18 +62,28 @@ extensions that provide fine-grained control over API interactions:
 
 - **`x-response-config`**: Control response handling:
   - Maximum response length limits
-  - `includeResponseKeys`: Specify which keys to include in the response (all others will be excluded)
+  - `includeResponseKeys`: Specify which keys to include in the response (all
+    others will be excluded)
     - Supports dot notation for nested fields (e.g., `user.profile.email`)
-    - Supports wildcards: `*` for single level, `**` for all nested levels (e.g., `data.*.id`, `user.**`)
-    - Single words without dots will match all properties with that name at any level
+    - Supports wildcards: `*` for single level, `**` for all nested levels
+      (e.g., `data.*.id`, `user.**`)
+    - Single words without dots will match all properties with that name at any
+      level
   - `excludeResponseKeys`: Specify which keys to exclude from the response
     - Supports dot notation for nested fields (e.g., `user.profile.address`)
-    - Supports wildcards: `*` for single level, `**` for all nested levels (e.g., `data.*.secret`, `credentials.**`)
-    - Single words without dots will match all properties with that name at any level (e.g., `secret` will exclude all properties named "secret" at any depth)
-  - `sensitiveResponseFields`: Mark specific fields as sensitive (will be replaced with "\*SENSITIVE\*")
+    - Supports wildcards: `*` for single level, `**` for all nested levels
+      (e.g., `data.*.secret`, `credentials.**`)
+    - Single words without dots will match all properties with that name at any
+      level (e.g., `secret` will exclude all properties named "secret" at any
+      depth)
+  - `sensitiveResponseFields`: Mark specific fields as sensitive (will be
+    replaced with "\*SENSITIVE\*")
     - Supports dot notation for nested fields (e.g., `user.token`)
-    - Supports wildcards: `*` for single level, `**` for all nested levels (e.g., `*.password`, `**.secret`)
-    - Single words without dots will match all properties with that name at any level (e.g., `password` will mask all properties named "password" at any depth)
+    - Supports wildcards: `*` for single level, `**` for all nested levels
+      (e.g., `*.password`, `**.secret`)
+    - Single words without dots will match all properties with that name at any
+      level (e.g., `password` will mask all properties named "password" at any
+      depth)
 - **`x-tree-shaking-func`**: Custom response data filtering
 
 ### 📜 Script-Based Dynamic Values
