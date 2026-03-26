@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { processRequestValues } from "../src/tool/value-processor.ts";
 
 Deno.test("processRequestValues - handles static values", async () => {

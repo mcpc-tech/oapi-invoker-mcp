@@ -1,4 +1,4 @@
-import { assertEquals, assertExists } from "jsr:@std/assert";
+import { assertEquals, assertExists } from "@std/assert";
 import { openapiToAIToolSchema } from "../src/tool/translator.ts";
 import type { OAPISpecDocument } from "../src/tool/parser.ts";
 

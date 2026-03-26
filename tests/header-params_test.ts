@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { invoke } from "../src/tool/invoker.ts";
 import {
   createBasicSpec,

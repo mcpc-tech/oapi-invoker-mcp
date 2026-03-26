@@ -42,9 +42,10 @@ export async function processValue(
  */
 export async function processHeaders(
   headers: Record<string, string>,
+  extraEnv: Record<string, string> = {},
 ): Promise<Record<string, string>> {
   const processedHeaders: Record<string, string> = {};
-  const env: Record<string, string> = {};
+  const env: Record<string, string> = { ...extraEnv };
 
   // Process headers in order, allowing later scripts to use earlier results
   for (const [key, value] of Object.entries(headers)) {
@@ -68,8 +69,9 @@ export async function processHeaders(
  */
 export async function processPathParams(
   pathParams: Record<string, unknown>,
+  extraEnv: Record<string, string> = {},
 ): Promise<Record<string, unknown>> {
-  return (await processValue(pathParams)) as Record<string, unknown>;
+  return (await processValue(pathParams, extraEnv)) as Record<string, unknown>;
 }
 
 /**
@@ -77,8 +79,9 @@ export async function processPathParams(
  */
 export async function processInputParams(
   inputParams: Record<string, unknown>,
+  extraEnv: Record<string, string> = {},
 ): Promise<Record<string, unknown>> {
-  return (await processValue(inputParams)) as Record<string, unknown>;
+  return (await processValue(inputParams, extraEnv)) as Record<string, unknown>;
 }
 
 /**
@@ -89,6 +92,7 @@ export async function processRequestValues(
   pathParams: Record<string, unknown>,
   inputParams: Record<string, unknown>,
   headerParams?: Record<string, unknown>,
+  extraEnv: Record<string, string> = {},
 ): Promise<{
   headers: Record<string, string>;
   pathParams: Record<string, unknown>;
@@ -96,14 +100,17 @@ export async function processRequestValues(
   headerParams: Record<string, unknown>;
 }> {
   // Process headers first since they may create environment variables for other values
-  const processedHeaders = await processHeaders(headers);
+  const processedHeaders = await processHeaders(headers, extraEnv);
 
   // Process other values in parallel since they don't depend on each other
   const [processedPathParams, processedInputParams, processedHeaderParams] =
     await Promise.all([
-      processValue(pathParams) as Promise<Record<string, unknown>>,
-      processValue(inputParams) as Promise<Record<string, unknown>>,
-      processValue(headerParams || {}) as Promise<Record<string, unknown>>,
+      processValue(pathParams, extraEnv) as Promise<Record<string, unknown>>,
+      processValue(inputParams, extraEnv) as Promise<Record<string, unknown>>,
+      processValue(
+        headerParams || {},
+        extraEnv,
+      ) as Promise<Record<string, unknown>>,
     ]);
 
   return {

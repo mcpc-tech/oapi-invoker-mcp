@@ -1,4 +1,4 @@
-import { assertEquals } from "jsr:@std/assert";
+import { assertEquals } from "@std/assert";
 import { postProcess, SENSITIVE_MARK } from "../src/tool/invoker.ts";
 
 // Mock the necessary objects for testing

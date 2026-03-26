@@ -352,19 +352,31 @@ async function readOAPISpec({
 export async function parseOAPISpecWithExtensions({
   format = "json",
   extensionFormat = "yaml",
+  specPath,
+  specUrl,
+  extensionPath,
+  extensionUrl,
 }: {
   format?: OAPISpecSrcFormat;
   extensionFormat?: OAPISpecSrcFormat;
+  /** Direct spec file path, takes priority over SPEC_PATH env var */
+  specPath?: string;
+  /** Direct spec URL, takes priority over SPEC_URL env var */
+  specUrl?: string;
+  /** Direct extension file path, takes priority over SPEC_EXTENSION_PATH env var */
+  extensionPath?: string;
+  /** Direct extension URL, takes priority over SPEC_EXTENSION_URL env var */
+  extensionUrl?: string;
 }): Promise<OAPISpecDocument> {
   const spec = await readOAPISpec({
-    url: process.env.SPEC_URL,
-    path: process.env.SPEC_PATH,
+    url: specUrl ?? process.env.SPEC_URL,
+    path: specPath ?? process.env.SPEC_PATH,
     format: (process.env.SPEC_FORMAT ?? format) as OAPISpecSrcFormat,
   });
 
   const specWithExtensions = await readOAPISpec({
-    url: process.env.SPEC_EXTENSION_URL,
-    path: process.env.SPEC_EXTENSION_PATH,
+    url: extensionUrl ?? process.env.SPEC_EXTENSION_URL,
+    path: extensionPath ?? process.env.SPEC_EXTENSION_PATH,
     format: (process.env.SPEC_EXTENSION_FORMAT ??
       extensionFormat) as OAPISpecSrcFormat,
   });

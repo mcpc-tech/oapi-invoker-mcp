@@ -78,6 +78,8 @@ export async function invoke(
   spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
   params: InvokerParams,
+  /** Extra env vars for {VAR} template replacement, takes priority over process.env */
+  env: Record<string, string> = {},
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
   const isDebugMode = process.env["OAPI_INVOKER_DEBUG"] === "1";
@@ -90,7 +92,7 @@ export async function invoke(
   const method = extendTool.method?.toLowerCase() || "get";
 
   // Process pathParams scripts before path construction
-  const processedPathParams = await processValue(pathParams) as Record<
+  const processedPathParams = await processValue(pathParams, env) as Record<
     string,
     unknown
   >;
@@ -150,6 +152,7 @@ export async function invoke(
     {}, // pathParams already processed above
     inputParams,
     headerParams,
+    env,
   );
   requestHeaders = processed.headers;
   pathParams = processedPathParams; // Use the already processed pathParams

@@ -95,7 +95,7 @@ export function processTemplateVariables(
   const templateRegex = /\{([A-Za-z_][A-Za-z0-9_]*)\}/g;
 
   return value.replace(templateRegex, (_match, envVar) => {
-    return process.env[envVar] || env[envVar] || "";
+    return env[envVar] || process.env[envVar] || "";
   });
 }
 

@@ -1,4 +1,4 @@
-import { assertEquals, assertStringIncludes } from "jsr:@std/assert";
+import { assertEquals, assertStringIncludes } from "@std/assert";
 import { invoke } from "../src/tool/invoker.ts";
 import type { OAPISpecDocument } from "../src/tool/parser.ts";
 import type { ExtendedAIToolSchema } from "../src/tool/translator.ts";

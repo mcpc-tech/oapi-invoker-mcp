@@ -1,7 +1,7 @@
 /**
  * Tests pathParams script execution
  */
-import { assertEquals } from "https://deno.land/std@0.224.0/assert/mod.ts";
+import { assertEquals } from "@std/assert";
 import { invoke } from "../src/tool/invoker.ts";
 import type { OAPISpecDocument } from "../src/tool/parser.ts";
 import type { ExtendedAIToolSchema } from "../src/tool/translator.ts";
