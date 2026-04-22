@@ -1,6 +1,3 @@
-/**
- * Tests pathParams script execution
- */
 import { assertEquals } from "@std/assert";
 import { invoke } from "../src/tool/invoker.ts";
 import type { OAPISpecDocument } from "../src/tool/parser.ts";
@@ -8,7 +5,8 @@ import type { ExtendedAIToolSchema } from "../src/tool/translator.ts";
 
 let capturedUrl = "";
 
-// Simple mock fetch
+const originalFetch = globalThis.fetch;
+
 globalThis.fetch = ((url: RequestInfo | URL) => {
   capturedUrl = url.toString();
   return Promise.resolve(
@@ -19,7 +17,6 @@ globalThis.fetch = ((url: RequestInfo | URL) => {
   );
 }) as typeof fetch;
 
-// Helper to create test objects
 function createTestSpec(): OAPISpecDocument {
   return {
     "x-sensitive-params": {},
@@ -63,7 +60,7 @@ Deno.test("pathParams executes scripts correctly", async () => {
     },
   );
 
-  const expected = "TCBTeam%2Fagents"; // encodeURIComponent('TCBTeam/agents')
+  const expected = "TCBTeam%2Fagents";
   assertEquals(
     capturedUrl.includes(`/projects/${expected}/tags/v1.0.0`),
     true,
@@ -86,10 +83,18 @@ Deno.test("pathParams handles mixed script and static values", async () => {
     },
   );
 
-  const expected = "My%20Project"; // encodeURIComponent('My Project')
+  const expected = "My%20Project";
   assertEquals(
     capturedUrl.includes(`/users/123/projects/${expected}`),
     true,
     `URL should contain both static and encoded values`,
   );
+});
+
+// Restore original fetch after all tests
+Deno.test({
+  name: "cleanup - restore fetch",
+  fn: () => {
+    globalThis.fetch = originalFetch;
+  },
 });

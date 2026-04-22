@@ -18,11 +18,10 @@ import {
 } from "./adapters/auth/tc3-hmac-sha256.ts";
 import type { OAPISpecDocument } from "./parser.ts";
 import type { ExtendedAIToolSchema } from "./translator.ts";
-import { p } from "@mcpc/core";
+import { p } from "../utils/template.ts";
 import { processRequestValues, processValue } from "./value-processor.ts";
+import { SENSITIVE_MARK } from "./constants.ts";
 import process from "node:process";
-
-export const SENSITIVE_MARK = "*SENSITIVE*";
 
 export interface InvokerParams {
   pathParams?: Record<string, unknown>;
@@ -84,18 +83,33 @@ export async function invoke(
   const requestConfigGlobal = spec["x-request-config"] || {};
   const isDebugMode = process.env["OAPI_INVOKER_DEBUG"] === "1";
 
-  let { pathParams = {}, inputParams = {}, headerParams = {} } = params;
+  const { pathParams = {}, inputParams = {}, headerParams = {} } = params;
 
   const baseUrl = requestConfigGlobal.baseUrl || spec.servers?.[0]?.url;
   const { headers = {}, timeout = 30000, retries = 0 } = requestConfigGlobal;
 
   const method = extendTool.method?.toLowerCase() || "get";
 
-  // Process pathParams scripts before path construction
-  const processedPathParams = await processValue(pathParams, env) as Record<
-    string,
-    unknown
-  >;
+  // Process all request values in one place
+  const processed = await processRequestValues(
+    { ...headers },
+    pathParams,
+    inputParams,
+    headerParams,
+    env,
+  );
+
+  const processedPathParams = processed.pathParams;
+  const processedInputParams = processed.inputParams;
+  const processedHeaderParams = processed.headerParams;
+  let requestHeaders = processed.headers;
+
+  // Add processed header parameters to requestHeaders
+  for (const [name, value] of Object.entries(processedHeaderParams)) {
+    if (value !== undefined) {
+      requestHeaders[name] = String(value);
+    }
+  }
 
   const path = p(extendTool.path!)(processedPathParams);
   const _op = (extendTool._rawOperation || {}) as Record<string, unknown>;
@@ -104,7 +118,7 @@ export async function invoke(
   const sensitiveParams =
     (_op["x-sensitive-params"] as Record<string, unknown>) ?? {};
 
-  inputParams = extend(inputParams, sensitiveParams);
+  const mergedInputParams = extend(processedInputParams, sensitiveParams);
 
   // Initialize debug info if debug mode is enabled
   let debugInfo: DebugInfo | null = null;
@@ -130,7 +144,7 @@ export async function invoke(
       },
       processing: {
         pathParams: cloneDeep(processedPathParams),
-        inputParams: cloneDeep(inputParams),
+        inputParams: cloneDeep(mergedInputParams),
         sensitiveParams: cloneDeep(sensitiveParams),
         usedProxy: false,
         usedTencentCloudAuth: false,
@@ -143,28 +157,7 @@ export async function invoke(
     throw new Error("Invalid tool configuration, no URL/method/path");
   }
 
-  let requestHeaders = { ...headers };
   let requestBody: string | null = null;
-
-  // Process remaining values (headers, inputParams, headerParams)
-  const processed = await processRequestValues(
-    requestHeaders,
-    {}, // pathParams already processed above
-    inputParams,
-    headerParams,
-    env,
-  );
-  requestHeaders = processed.headers;
-  pathParams = processedPathParams; // Use the already processed pathParams
-  inputParams = processed.inputParams;
-  const processedHeaders = processed.headerParams || {};
-
-  // Add processed header parameters to requestHeaders
-  for (const [name, value] of Object.entries(processedHeaders)) {
-    if (value !== undefined) {
-      requestHeaders[name] = String(value);
-    }
-  }
 
   // Determine final path: use x-custom-path (processed) if provided, otherwise use operation path
   const finalPath = customPathTemplate
@@ -215,7 +208,7 @@ export async function invoke(
   }
 
   // Separate inputParams into query and body parameters
-  for (const [key, value] of Object.entries(inputParams)) {
+  for (const [key, value] of Object.entries(mergedInputParams)) {
     if (queryParamNames.has(key)) {
       queryParams[key] = value;
     } else {
@@ -249,8 +242,9 @@ export async function invoke(
       debugInfo.processing.usedTencentCloudAuth = true;
     }
 
-    const authConfig = requestConfigGlobal.auth
-      .TencentCloudAuth as TencentCloudAuthConfig;
+    const authConfig: TencentCloudAuthConfig = {
+      ...requestConfigGlobal.auth.TencentCloudAuth,
+    };
 
     // Get action from operation if available
     if (_op.operationId && !authConfig.action) {
@@ -385,7 +379,7 @@ export async function invoke(
  * @param keys Array of path strings that may contain wildcards
  * @returns Array of expanded path strings with wildcards resolved to actual paths
  */
-function expandWildcardPaths(item: any, keys: string[]): string[] {
+function expandWildcardPaths(item: unknown, keys: string[]): string[] {
   if (!isObject(item) || isNull(item) || keys.length === 0) {
     return keys;
   }
@@ -410,7 +404,7 @@ function expandWildcardPaths(item: any, keys: string[]): string[] {
  * Recursively expands a path with wildcards
  */
 function expandPathRecursive(
-  obj: any,
+  obj: unknown,
   segments: string[],
   index: number,
   currentPath: string,
@@ -490,7 +484,7 @@ function expandPathRecursive(
  * @param result Array to collect matching paths
  */
 function findMatchingPropertyPaths(
-  obj: any,
+  obj: unknown,
   key: string,
   currentPath: string = "",
   result: string[] = [],
@@ -523,11 +517,11 @@ function findMatchingPropertyPaths(
  * Transforms a single data item (object) by applying inclusion, exclusion, and sensitive field masking rules.
  */
 function transformItem(
-  item: any,
+  item: unknown,
   includeKeys: string[],
   excludeKeys: string[],
   sensitiveKeys: string[],
-): any {
+): unknown {
   // If item is not an object or is null, transformations do not apply.
   if (!isObject(item) || isNull(item)) {
     return item;
@@ -571,22 +565,21 @@ function transformItem(
    * @param {any} originalItem - The item to process.
    * @returns {any} The initial state of the processed item.
    */
-  const createInitialItem = (originalItem: any): any => {
+  const createInitialItem = (originalItem: unknown): unknown => {
     if (expandedIncludeKeys.length > 0) {
-      // _.reduce to build the new object. _.set mutates the accumulator (acc).
       return reduce(
         expandedIncludeKeys,
-        (acc: any, pathString: string) => {
-          const value = get(originalItem, pathString); // Use _.get
+        (acc: Record<string, unknown>, pathString: string) => {
+          const value = get(originalItem, pathString);
           if (value !== undefined) {
-            set(acc, pathString, value); // Use _.set, mutates acc
+            set(acc, pathString, value);
           }
           return acc;
         },
-        {}, // Initial accumulator is an empty object
+        {},
       );
     }
-    return cloneDeep(originalItem); // Use _.cloneDeep
+    return cloneDeep(originalItem);
   };
 
   /**
@@ -596,7 +589,7 @@ function transformItem(
    * @param {any} currentProcessedItem - The item after inclusion/cloning.
    * @returns {any} The item with specified keys excluded.
    */
-  const applyExclusions = (currentProcessedItem: any): any => {
+  const applyExclusions = (currentProcessedItem: unknown): unknown => {
     if (
       expandedExcludeKeys.length === 0 ||
       !isObject(currentProcessedItem) ||
@@ -619,7 +612,7 @@ function transformItem(
    * @param {any} currentProcessedItem - The item after exclusions.
    * @returns {any} The item with sensitive fields masked.
    */
-  const applySensitization = (currentProcessedItem: any): any => {
+  const applySensitization = (currentProcessedItem: unknown): unknown => {
     if (
       expandedSensitiveKeys.length === 0 ||
       !isObject(currentProcessedItem) ||
@@ -627,19 +620,15 @@ function transformItem(
     ) {
       return currentProcessedItem;
     }
-    // _.set will mutate currentProcessedItem.
-    // We iterate and apply _.set for each sensitive key.
-    // Using _.reduce here to chain mutations on the same object.
     return reduce(
       expandedSensitiveKeys,
-      (acc: any, pathString: string) => {
+      (acc: Record<string, unknown>, pathString: string) => {
         if (has(acc, pathString)) {
-          // Check if path exists using _.has
-          set(acc, pathString, SENSITIVE_MARK); // _.set mutates acc
+          set(acc, pathString, SENSITIVE_MARK);
         }
         return acc;
       },
-      currentProcessedItem, // Start with the currentProcessedItem
+      currentProcessedItem as Record<string, unknown>,
     );
   };
 
@@ -684,8 +673,8 @@ export function postProcess(
       return data;
     }
 
-    const wasArray = isArray(data); // Use _.isArray
-    const itemsToProcess = wasArray ? (data as any[]) : [data];
+    const wasArray = isArray(data);
+    const itemsToProcess = wasArray ? data : [data];
 
     // Use _.map for transformation
     const processedItems = map(itemsToProcess, (currentItem: unknown) => {

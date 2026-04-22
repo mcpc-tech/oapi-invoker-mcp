@@ -51,7 +51,9 @@ export async function createOapiInvokerServer(
   const server = new ComposableMCPServer(...serverArgs);
   const invokeEnv = config.env ?? {};
 
-  standardTools.map((tool) => {
+  standardTools.forEach((tool) => {
+    const hasOutputSchema = !!tool.outputSchema;
+
     server.tool(
       tool.name,
       tool.description ?? "",
@@ -63,25 +65,49 @@ export async function createOapiInvokerServer(
           params as InvokerParams,
           invokeEnv,
         );
-        return {
-          content: [
-            {
-              type: "text",
-              text: JSON.stringify(res.data),
-            },
-          ].concat(
-            res.debugInfo
-              ? [
-                {
-                  type: "text",
-                  text: JSON.stringify({ debug: res.debugInfo }),
-                },
-              ]
-              : [],
-          ),
+
+        const textContent: Array<{ type: "text"; text: string }> = [
+          {
+            type: "text" as const,
+            text: JSON.stringify(res.data),
+          },
+        ];
+
+        if (res.debugInfo) {
+          textContent.push({
+            type: "text" as const,
+            text: JSON.stringify({ debug: res.debugInfo }),
+          });
+        }
+
+        const isSuccess = res.status >= 200 && res.status < 300;
+
+        const result: {
+          content: Array<{ type: "text"; text: string }>;
+          structuredContent?: unknown;
+          isError?: boolean;
+        } = {
+          content: textContent,
         };
+
+        // MCP requires:
+        // - If tool has outputSchema and call is successful → MUST return structuredContent
+        // - If tool has outputSchema and call failed → MUST set isError: true
+        //   (then structuredContent is optional and won't be validated)
+        if (hasOutputSchema) {
+          if (isSuccess) {
+            result.structuredContent = res.data;
+          } else {
+            result.isError = true;
+          }
+        }
+
+        return result;
       },
-      { internal: false },
+      {
+        internal: false,
+        ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+      },
     );
   });
 

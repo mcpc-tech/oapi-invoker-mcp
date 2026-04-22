@@ -17,8 +17,8 @@ import type {
   ParameterExtension,
 } from "./parser.ts";
 import type { OpenAPI } from "@scalar/openapi-types";
-import { p } from "@mcpc/core";
-import { SENSITIVE_MARK } from "./invoker.ts";
+import { p } from "../utils/template.ts";
+import { SENSITIVE_MARK } from "./constants.ts";
 
 /**
  * Tool schema from model context protocol
@@ -26,7 +26,7 @@ import { SENSITIVE_MARK } from "./invoker.ts";
 export type AIToolSchema = z.infer<typeof ToolSchema>;
 
 export interface ExtendedAIToolSchema extends AIToolSchema {
-  _responseSchema?: Record<string, any>;
+  _responseSchema?: Record<string, unknown>;
   _rawOperation?: OAPIOperation;
   _meta?: { method: string; path: string };
   method?: string;
@@ -40,6 +40,11 @@ export interface ExtendedAIToolSchema extends AIToolSchema {
     };
     required?: string[];
   };
+  outputSchema?: AIToolSchema["outputSchema"];
+  // 显式声明基类型属性，因为 zod 3.25+ 的 infer 对 $strip 的处理可能导致属性丢失
+  name: string;
+  description?: string;
+  examples?: AIToolSchema["examples"];
 }
 
 export interface AIToolSchemaRes {
@@ -112,7 +117,7 @@ function createBasicToolSchema(
     return `${prefix}${toolName}${suffix}`;
   };
 
-  const examples = operation["x-examples"]?.join("\n") ?? "";
+  const examples = operation["x-examples"] ?? [];
 
   const name = formatToolName();
 
@@ -120,27 +125,21 @@ function createBasicToolSchema(
     `{description}
 
 API Endpoint: {method} {path}
-{tags}
 {examples}
-
-Use this tool to make HTTP requests to the API endpoint. The tool will handle authentication, parameter processing, and response formatting automatically.
 
 Parameter Usage:
 - pathParams: Required for URLs with placeholders. Provide concrete values.
 - inputParams: Required for query/body/form data. Provide as needed.
-- headerParams: Optional. For dynamic headers only. If omitted, global headers will be used automatically.
-
-Values can be strings or executable scripts for dynamic computation.
-Use scripts only when transformation/computation is needed (encoding, timestamps, etc).
-Script format: #!/usr/bin/env node\nprocess.stdout.write(encodeURIComponent("a/b"))`,
+- headerParams: Optional. For dynamic headers only. If omitted, global headers will be used automatically.`,
   )({
-    examples: examples ? `\nExamples:\n${examples}` : "",
     method: method.toUpperCase(),
     path,
     description: operation.description ||
       operation.summary ||
       `Execute ${method.toUpperCase()} request to ${path}`,
-    tags: operation.tags ? `\nCategories: ${operation.tags.join(", ")}` : "",
+    examples: examples.length
+      ? `\nExamples:\n${examples.map((e) => `- ${e}`).join("\n")}`
+      : "",
   });
 
   return {
@@ -502,6 +501,22 @@ export async function openapiToAIToolSchema(
       standardTool.examples = t.examples;
     }
 
+    // Derive outputSchema from the 200/2xx response schema if available.
+    // MCP SDK requires outputSchema.type to be exactly "object", so we only
+    // forward schemas that already declare that type.
+    const successSchema = t._responseSchema
+      ? (t._responseSchema["200"] || t._responseSchema["201"] ||
+        t._responseSchema["202"])
+      : undefined;
+    if (
+      successSchema &&
+      typeof successSchema === "object" &&
+      successSchema !== null &&
+      (successSchema as Record<string, unknown>).type === "object"
+    ) {
+      standardTool.outputSchema = successSchema as AIToolSchema["outputSchema"];
+    }
+
     return standardTool;
   });
 
@@ -523,16 +538,19 @@ export async function openapiToAIToolSchema(
 function ensureUniqueToolNames(
   tools: ExtendedAIToolSchema[],
 ): ExtendedAIToolSchema[] {
-  const nameCount: Record<string, number> = {};
+  const seen = new Set<string>();
 
   return tools.map((tool) => {
-    if (!nameCount[tool.name]) {
-      nameCount[tool.name] = 1;
-    } else {
-      nameCount[tool.name]++;
-      // Append method to ensure uniqueness if name collision occurs
-      tool.name = `${tool.name} [${tool._meta?.method.toUpperCase()}]`;
+    let candidate = tool.name;
+    let suffix = 1;
+
+    while (seen.has(candidate)) {
+      candidate = `${tool.name}_${suffix}`;
+      suffix++;
     }
+
+    seen.add(candidate);
+    tool.name = candidate;
     return tool;
   });
 }

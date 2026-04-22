@@ -4,13 +4,8 @@ import { parse } from "yaml";
 import { z } from "zod";
 import type { OpenAPI } from "@scalar/openapi-types";
 import { openapi } from "@scalar/openapi-parser";
-import { mergeDeep } from "remeda";
-import { p } from "@mcpc/core";
-
-const SPEC_ENV = {
-  method: undefined,
-  path: undefined,
-};
+import { toMerged } from "@es-toolkit/es-toolkit";
+import { p } from "../utils/template.ts";
 
 /**
  * Zod schemas for OpenAPI extensions
@@ -301,9 +296,7 @@ export function filterSpec(spec: OAPISpecDocument): OAPISpecDocument {
     }
   }
 
-  spec.paths = filteredPaths as typeof spec.paths;
-
-  return spec;
+  return { ...spec, paths: filteredPaths } as OAPISpecDocument;
 }
 
 /**
@@ -314,12 +307,12 @@ async function readOAPISpec({
   path,
   url,
   format = "json",
-  env = { ...process.env, ...SPEC_ENV },
+  env = { ...process.env },
 }: {
   path?: string;
   url?: string;
   format?: OAPISpecSrcFormat;
-  env?: NodeJS.ProcessEnv;
+  env?: Record<string, string | undefined>;
 }): Promise<OAPISpecDocument | null> {
   if (url) {
     try {
@@ -381,7 +374,7 @@ export async function parseOAPISpecWithExtensions({
       extensionFormat) as OAPISpecSrcFormat,
   });
 
-  const parsed = mergeDeep(spec ?? {}, specWithExtensions ?? {});
+  const parsed = toMerged(spec ?? {}, specWithExtensions ?? {});
   // TODO: cache specification
   const { schema } = await openapi().load(parsed).upgrade().dereference().get();
   const filtered = filterSpec(schema as OAPISpecDocument);

@@ -383,8 +383,8 @@ Deno.test("createOapiInvokerServer - two instances resolve {VAR} independently p
     );
 
     // Tool exists on both servers
-    const toolsA = (serverA as unknown as { tools: unknown[] }).tools;
-    const toolsB = (serverB as unknown as { tools: unknown[] }).tools;
+    const toolsA = serverA.getPublicTools();
+    const toolsB = serverB.getPublicTools();
 
     assertNotEquals(
       serverA,
