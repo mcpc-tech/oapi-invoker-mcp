@@ -80,11 +80,11 @@ async function prepareSpec(): Promise<{ specPath?: string; specUrl?: string }> {
   return { specPath: tmpFile };
 }
 
-async function setupClient() {
+async function setupClient(options?: { strictOutputSchema?: boolean }) {
   const { specPath, specUrl } = await prepareSpec();
 
   const server = await createOapiInvokerServer(
-    { specPath, specUrl },
+    { specPath, specUrl, strictOutputSchema: options?.strictOutputSchema },
     { name: "e2e-test-server", version: "0.0.1" },
     { capabilities: { tools: {} } },
   );
@@ -121,7 +121,7 @@ Deno.test({
   name:
     "e2e - MCP client receives structuredContent for successful calls with outputSchema",
   fn: async () => {
-    const { client } = await setupClient();
+    const { client } = await setupClient({ strictOutputSchema: true });
 
     const tools = await client.listTools();
     assertEquals(tools.tools.length > 0, true);

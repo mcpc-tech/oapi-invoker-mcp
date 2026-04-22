@@ -26,6 +26,13 @@ export interface OapiInvokerConfig {
    * invoke time (e.g. credentials). These take priority over process.env.
    */
   env?: Record<string, string>;
+  /**
+   * When `true`, registers `outputSchema` for tools so MCP clients validate
+   * `structuredContent` against the response schema. Most real-world OpenAPI
+   * specs are not fully accurate (e.g. nullable fields omitted), so this is
+   * `false` by default to avoid `-32602` validation errors.
+   */
+  strictOutputSchema?: boolean;
 }
 
 /**
@@ -50,9 +57,13 @@ export async function createOapiInvokerServer(
 
   const server = new ComposableMCPServer(...serverArgs);
   const invokeEnv = config.env ?? {};
+  const strictOutputSchema = config.strictOutputSchema ?? false;
 
   standardTools.forEach((tool) => {
-    const hasOutputSchema = !!tool.outputSchema;
+    // Only register outputSchema when strict mode is enabled.
+    // Most real-world OpenAPI specs are inaccurate (missing nullable, etc.)
+    // which causes MCP clients to throw -32602 validation errors.
+    const hasOutputSchema = strictOutputSchema && !!tool.outputSchema;
 
     server.tool(
       tool.name,
@@ -106,7 +117,7 @@ export async function createOapiInvokerServer(
       },
       {
         internal: false,
-        ...(tool.outputSchema ? { outputSchema: tool.outputSchema } : {}),
+        ...(hasOutputSchema ? { outputSchema: tool.outputSchema } : {}),
       },
     );
   });
