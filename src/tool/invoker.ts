@@ -81,7 +81,8 @@ export async function invoke(
   env: Record<string, string> = {},
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
-  const isDebugMode = process.env["OAPI_INVOKER_DEBUG"] === "1";
+  const isDebugMode =
+    (env["OAPI_INVOKER_DEBUG"] ?? process.env["OAPI_INVOKER_DEBUG"]) === "1";
 
   const { pathParams = {}, inputParams = {}, headerParams = {} } = params;
 

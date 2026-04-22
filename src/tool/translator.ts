@@ -121,13 +121,15 @@ function createBasicToolSchema(
 
   const name = formatToolName();
 
+  const examplesSection = examples.length
+    ? `\nExamples:\n${examples.map((e) => `- ${e}`).join("\n")}\n`
+    : "";
+
   const description = p(
     `{description}
 
 API Endpoint: {method} {path}
-{examples}
-
-Parameter Usage:
+{examplesSection}Parameter Usage:
 - pathParams: Required for URLs with placeholders. Provide concrete values.
 - inputParams: Required for query/body/form data. Provide as needed.
 - headerParams: Optional. For dynamic headers only. If omitted, global headers will be used automatically.`,
@@ -137,9 +139,7 @@ Parameter Usage:
     description: operation.description ||
       operation.summary ||
       `Execute ${method.toUpperCase()} request to ${path}`,
-    examples: examples.length
-      ? `\nExamples:\n${examples.map((e) => `- ${e}`).join("\n")}`
-      : "",
+    examplesSection,
   });
 
   return {
