@@ -2,7 +2,7 @@ import { ComposableMCPServer } from "@mcpc/core";
 
 import { parseOAPISpecWithExtensions } from "./tool/parser.ts";
 import { openapiToAIToolSchema } from "./tool/translator.ts";
-import { invoke, type InvokerParams } from "./tool/invoker.ts";
+import { invoke, type InvokeHook, type InvokerParams } from "./tool/invoker.ts";
 import { jsonSchema, type Schema } from "ai";
 
 export const INCOMING_MSG_ROUTE_PATH = "/oapi/messages";
@@ -33,6 +33,30 @@ export interface OapiInvokerConfig {
    * `false` by default to avoid `-32602` validation errors.
    */
   strictOutputSchema?: boolean;
+  /**
+   * Lifecycle hooks for customizing invoke behavior.
+   */
+  hooks?: {
+    /**
+     * Called after user inputParams are processed but before sensitive params
+     * are resolved. Use this to dynamically set credentials based on the
+     * user's input (e.g. look up a masterkey by appid).
+     *
+     * Mutating `ctx.sensitiveParams` or `ctx.env` in this hook affects the
+     * outgoing request.
+     *
+     * @example
+     * ```ts
+     * hooks: {
+     *   beforeInvoke: (ctx) => {
+     *     const keys = JSON.parse(process.env.MASTERKEYS || '{}');
+     *     ctx.sensitiveParams.masterkey = keys[ctx.inputParams.appid] || '';
+     *   },
+     * }
+     * ```
+     */
+    beforeInvoke?: InvokeHook;
+  };
 }
 
 /**
@@ -58,6 +82,7 @@ export async function createOapiInvokerServer(
   const server = new ComposableMCPServer(...serverArgs);
   const invokeEnv = config.env ?? {};
   const strictOutputSchema = config.strictOutputSchema ?? false;
+  const beforeInvoke = config.hooks?.beforeInvoke;
 
   standardTools.forEach((tool) => {
     // Only register outputSchema when strict mode is enabled.
@@ -75,6 +100,7 @@ export async function createOapiInvokerServer(
           toolToExtendInfo[tool.name],
           params as InvokerParams,
           invokeEnv,
+          beforeInvoke,
         );
 
         const textContent: Array<{ type: "text"; text: string }> = [

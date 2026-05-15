@@ -7,6 +7,7 @@ import {
 import type { ComposableMCPServer } from "@mcpc/core";
 
 export type { OapiInvokerConfig };
+export type { InvokeHook, InvokeHookContext } from "./tool/invoker.ts";
 
 export const createServer = (
   config?: OapiInvokerConfig,

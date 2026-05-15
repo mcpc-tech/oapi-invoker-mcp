@@ -73,12 +73,42 @@ interface DebugInfo {
  *
  * @TODO: CacheConfigSchema ParameterExtensionSchema ResponseExtensionSchema
  */
+/**
+ * Hook context passed to beforeInvoke hooks.
+ * Mutating `sensitiveParams` or `env` in the hook affects the outgoing request.
+ */
+export interface InvokeHookContext {
+  /** The MCP tool name being invoked */
+  toolName: string;
+  /** HTTP method (lowercase) */
+  method: string;
+  /** User-supplied input parameters (already processed for templates/scripts) */
+  inputParams: Record<string, unknown>;
+  /** User-supplied path parameters (already processed) */
+  pathParams: Record<string, unknown>;
+  /**
+   * Sensitive parameters from `x-sensitive-params`.
+   * Mutate this object to dynamically set credentials based on inputParams.
+   */
+  sensitiveParams: Record<string, unknown>;
+  /**
+   * Environment variables used for `{VAR}` template replacement.
+   * Includes static env from config, `INPUT_*` vars derived from inputParams,
+   * and process.env as fallback. Mutate to inject extra vars for template resolution.
+   */
+  env: Record<string, string>;
+}
+
+export type InvokeHook = (ctx: InvokeHookContext) => void | Promise<void>;
+
 export async function invoke(
   spec: OAPISpecDocument,
   extendTool: ExtendedAIToolSchema,
   params: InvokerParams,
   /** Extra env vars for {VAR} template replacement, takes priority over process.env */
   env: Record<string, string> = {},
+  /** Optional hook called before the request is made, after inputParams are processed */
+  beforeInvoke?: InvokeHook,
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
   const isDebugMode =
@@ -116,10 +146,44 @@ export async function invoke(
   const _op = (extendTool._rawOperation || {}) as Record<string, unknown>;
   const specificUrl = _op["x-custom-base-url"] as string | undefined;
   const customPathTemplate = _op["x-custom-path"] as string | undefined;
-  const sensitiveParams =
-    (_op["x-sensitive-params"] as Record<string, unknown>) ?? {};
+  const sensitiveParams = cloneDeep(
+    (_op["x-sensitive-params"] as Record<string, unknown>) ?? {},
+  );
 
-  const mergedInputParams = extend(processedInputParams, sensitiveParams);
+  // Build enriched env: static env + INPUT_* vars from user's processed inputParams
+  // This allows x-sensitive-params scripts/templates to reference user inputs,
+  // e.g. {INPUT_APPID} resolves to the user-supplied appid value.
+  const enrichedEnv: Record<string, string> = { ...env };
+  for (const [k, v] of Object.entries(processedInputParams)) {
+    if (
+      typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+    ) {
+      enrichedEnv[`INPUT_${k.toUpperCase()}`] = String(v);
+    }
+  }
+
+  // Allow callers to dynamically modify sensitiveParams/env before template resolution
+  if (beforeInvoke) {
+    await beforeInvoke({
+      toolName: extendTool.name,
+      method,
+      inputParams: processedInputParams,
+      pathParams: processedPathParams,
+      sensitiveParams,
+      env: enrichedEnv,
+    });
+  }
+
+  // Process sensitiveParams templates/scripts with the enriched env
+  const resolvedSensitiveParams = await processValue(
+    sensitiveParams,
+    enrichedEnv,
+  ) as Record<string, unknown>;
+
+  const mergedInputParams = extend(
+    processedInputParams,
+    resolvedSensitiveParams,
+  );
 
   // Initialize debug info if debug mode is enabled
   let debugInfo: DebugInfo | null = null;
@@ -146,7 +210,7 @@ export async function invoke(
       processing: {
         pathParams: cloneDeep(processedPathParams),
         inputParams: cloneDeep(mergedInputParams),
-        sensitiveParams: cloneDeep(sensitiveParams),
+        sensitiveParams: cloneDeep(resolvedSensitiveParams),
         usedProxy: false,
         usedTencentCloudAuth: false,
         pathRemapped: false,
