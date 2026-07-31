@@ -286,7 +286,14 @@ export async function invoke(
   // Add query parameters to URL for all requests
   if (Object.keys(queryParams).length > 0) {
     for (const [key, value] of Object.entries(queryParams)) {
-      if (typeof value === "object") {
+      if (Array.isArray(value)) {
+        // collectionFormat=multi / style=form,explode=true: repeat the key for
+        // each element instead of JSON-stringifying the whole array. Otherwise
+        // the receiving server may fail to parse the value and silently drop it.
+        for (const item of value) {
+          url.searchParams.append(key, String(item));
+        }
+      } else if (typeof value === "object") {
         url.searchParams.append(key, JSON.stringify(value));
       } else {
         url.searchParams.append(key, String(value));
