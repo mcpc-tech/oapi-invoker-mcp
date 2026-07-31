@@ -34,6 +34,15 @@ export interface OapiInvokerConfig {
    */
   strictOutputSchema?: boolean;
   /**
+   * When `true`, suppresses console log output from the underlying `@mcpc/core`
+   * loggers (server startup, tool registration, etc.). This keeps the MCP server
+   * quiet by default. MCP protocol logging (`logging/setLevel`) still works
+   * regardless. Set to `false` to restore verbose console output.
+   *
+   * @default true
+   */
+  silent?: boolean;
+  /**
    * Lifecycle hooks for customizing invoke behavior.
    */
   hooks?: {
@@ -79,10 +88,17 @@ export async function createOapiInvokerServer(
     specification,
   );
 
-  const server = new ComposableMCPServer(...serverArgs);
   const invokeEnv = config.env ?? {};
   const strictOutputSchema = config.strictOutputSchema ?? false;
   const beforeInvoke = config.hooks?.beforeInvoke;
+  const silent = config.silent ?? true;
+
+  // Default to silent: suppress @mcpc/core console noise unless explicitly disabled.
+  // `silent` is passed to the ComposableMCPServer constructor, which calls setSilent().
+  const server = new ComposableMCPServer(
+    serverArgs[0],
+    { ...serverArgs[1], silent },
+  );
 
   standardTools.forEach((tool) => {
     // Only register outputSchema when strict mode is enabled.
@@ -101,6 +117,7 @@ export async function createOapiInvokerServer(
           params as InvokerParams,
           invokeEnv,
           beforeInvoke,
+          silent,
         );
 
         const textContent: Array<{ type: "text"; text: string }> = [

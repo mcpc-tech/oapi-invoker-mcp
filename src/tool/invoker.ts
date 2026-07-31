@@ -109,6 +109,8 @@ export async function invoke(
   env: Record<string, string> = {},
   /** Optional hook called before the request is made, after inputParams are processed */
   beforeInvoke?: InvokeHook,
+  /** When `true`, suppresses the retry-failure console error. */
+  silent?: boolean,
 ): Promise<InvokerResponse> {
   const requestConfigGlobal = spec["x-request-config"] || {};
   const isDebugMode =
@@ -368,12 +370,14 @@ export async function invoke(
       break;
     } catch (err) {
       error = err as Error;
-      console.error(
-        `Attempt ${
-          attempt + 1
-        } failed for tool ${extendTool.name}: ${error.message}`,
-        error,
-      );
+      if (!silent) {
+        console.error(
+          `Attempt ${
+            attempt + 1
+          } failed for tool ${extendTool.name}: ${error.message}`,
+          error,
+        );
+      }
       if (attempt === retries) {
         throw new Error(
           `Failed to invoke tool ${extendTool.name}: ${error.message}`,
